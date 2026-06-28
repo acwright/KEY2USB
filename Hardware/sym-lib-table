@@ -1,0 +1,4 @@
+(sym_lib_table
+	(version 7)
+	(lib (name "KEY2USB") (type "KiCad") (uri "${KIPRJMOD}/../Libraries/KEY2USB.kicad_sym") (options "") (descr ""))
+)
