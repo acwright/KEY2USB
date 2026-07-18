@@ -25,6 +25,19 @@
 VERSION_MAJOR = 1
 VERSION_MINOR = 0
 
+; ---------------------------------------------------------------------------
+; Build option: C128 extended-key scan (numeric keypad / ESC / TAB / ALT /
+; HELP / cursor pad via $D02F). DISABLED by default.
+;
+; It is unverified on real C128 hardware, the ATmega currently leaves keyIDs
+; 64+ unmapped (so it adds no usable keys), and unstable extended-line reads
+; flood the event pipeline - which destabilises normal key scanning on a real
+; C128 (intermittent/missed keys plus erratic repeat bursts). Verify the scan
+; with a logic analyzer on $D02F / $DC01, and add the keyID 64+ entries to the
+; ATmega keymap, before defining this.
+; ---------------------------------------------------------------------------
+; .define SCAN_EXTENDED
+
 .ifdef TARGET_C128
 BANNER_MODE_LEN = 9
 BANNER_MODE_COL = 15
@@ -49,19 +62,19 @@ BANNER_MODE_COL = 16
 .endif
 
 ; =============================================================================
-;   Zero-page scratch (owned once we SEI; not part of the ROM image)
+;   Zero-page scratch + runtime state (owned once we SEI; not in the ROM image)
 ; =============================================================================
+; Everything lives in zero page. Zero page is RAM on both the C64 and the C128,
+; whereas $C000-$FFFF is ROM in the C128's external-function-ROM memory config -
+; storing prevstate there made every write vanish, so the key-state array never
+; updated and the scan emitted a flood of phantom events (garbage/stuck keys on
+; a real C128). Zero page fixes it for both machines.
 .segment "ZEROPAGE"
 curpress:  .res 1                       ; current pressed bitmap for a column
 changed:   .res 1                       ; bits that changed this scan
 presstmp:  .res 1                       ; 1 = the bit being processed is pressed
 keybase:   .res 1                       ; keyID base for the current column (col*8)
 idx:       .res 1                       ; outer loop column index
-
-; =============================================================================
-;   Runtime state in free RAM at $C000 (not part of the ROM image)
-; =============================================================================
-.segment "BSS"
 prevstate: .res 8                       ; previous pressed bitmap per matrix column
 prevext:   .res 3                       ; previous pressed bitmap per C128 K-column
 
@@ -154,7 +167,9 @@ coldstart:
 mainloop:
         jsr     scan_matrix
 .ifdef TARGET_C128
+.ifdef SCAN_EXTENDED
         jsr     scan_extended
+.endif
 .endif
         jsr     scan_delay
         jmp     mainloop
@@ -191,6 +206,7 @@ scan_matrix:
         rts
 
 .ifdef TARGET_C128
+.ifdef SCAN_EXTENDED
 ; -----------------------------------------------------------------------------
 ;   scan_extended - C128 numeric keypad / ESC / TAB / ALT / HELP / cursor pad.
 ;   The three extra columns K0..K2 live on $D02F bits 0..2 (active low) while
@@ -231,6 +247,7 @@ scan_extended:
         lda     #$ff
         sta     VIC_KBD                 ; deselect extended columns again
         rts
+.endif
 .endif
 
 ; -----------------------------------------------------------------------------
@@ -360,8 +377,10 @@ draw_banner:
 ; Walking-zero column-select patterns for $DC00 (PA0..PA7).
 colmask:   .byte $FE,$FD,$FB,$F7,$EF,$DF,$BF,$7F
 .ifdef TARGET_C128
+.ifdef SCAN_EXTENDED
 ; K0..K2 select patterns for $D02F.
 extmask:   .byte $FE,$FD,$FB
+.endif
 .endif
 
 ; Screen-code text (uppercase/graphics set: A-Z = 1-26, 0-9 = $30-$39).

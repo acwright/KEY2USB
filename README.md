@@ -69,22 +69,19 @@ A single cartridge PCB hosting the ROM, glue logic, and USB MCU. Provides:
 
 ## Firmware
 
-Both firmwares are implemented in `Firmware/` (see `Firmware/README.md` for the
-build/flash/bring-up plan). **Confirmed working end-to-end on a real C64
-Ultimate**: the cartridge autostarts, shows the splash, and delivers keystrokes
-over USB into VICE (see [VICE Setup](#vice-setup) below — a keymap setting is
-required). The C128 bank has been verified to autostart and render its splash
-in emulation; hardware confirmation on a real C128 is still pending. Behavior:
+Both firmwares are implemented in `Firmware/` (see `Firmware/README.md` for build,
+flash, and layout details). Set VICE's keyboard mapping to **Positional** — see
+[VICE Setup](#vice-setup).
 
 **6502 side (per bank):**
-- Autostart via `CBM80` signature (C64) or `CBM` / `$01` byte (C128 bank); clear screen, print a banner via `CHROUT`, then enter an infinite keyboard-scan loop.
+- Autostart via the `CBM80` signature (C64) or `CBM` / `$01` header (C128 bank), take over the machine, and draw a centered `KEY2USB` splash on the 40-column screen.
 - Scan the keyboard matrix directly via CIA #1 (`$DC00`/`$DC01`) for raw make/break events and modifier state — no KERNAL buffer.
-- C128 bank additionally scans the extended columns (`K0–K2` via `$D02F` + `$DC01`) for the numeric keypad, ESC, TAB, ALT, HELP, and four dedicated cursor keys.
 - On any key state change, write a one-byte event to `$DE00`.
+- Optionally (off by default), the C128 bank can also scan the extended keys — numeric keypad, ESC, TAB, ALT, HELP, and cursor pad — via `$D02F`.
 
-**ATmega328P side:**
+**ATmega328/328P side:**
 - Poll `RDY`; on set, read the key byte from `PINC`/`PINB`, pulse `/CLRRDY`.
-- Run V-USB (low-speed USB 1.1); translate to USB HID keycodes and send an 8-byte boot-protocol keyboard report.
+- Run V-USB (low-speed USB 1.1); translate to USB HID usages and send an 8-byte boot-protocol keyboard report.
 - Configured as a self-powered USB device.
 
 ## VICE Setup

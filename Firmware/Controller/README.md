@@ -43,9 +43,9 @@ For a 16 MHz crystal, no bootloader, ISP enabled, BOD off:
 | LOCK  | `0xFF`| unlocked |
 
 `fuses.cfg` holds these in minipro's config format (keys `lfuse`/`hfuse`/`efuse`/
-`lock`, confirmed with minipro 0.7.4). **The critical one is LFUSE**: a
-factory-fresh 328 reads `lfuse = 0x62` (internal 8 MHz RC ÷8 = 1 MHz), which must
-become `0xFF` for the external 16 MHz crystal or V-USB will not run.
+`lock`). **The critical one is LFUSE**: a factory-fresh 328 ships at `0x62`
+(internal 8 MHz RC ÷8 = 1 MHz) and must become `0xFF` for the external 16 MHz
+crystal, or V-USB will not run.
 
     # optional: read current values (also confirms the file format)
     minipro -p "ATMEGA328@DIP28" -c config -r current.cfg
@@ -81,11 +81,4 @@ VICE positional:
     C64 up    -> HID '\'          C64 left      -> HID '`'
 
 Edit the table freely for other hosts/emulators. keyIDs 64–127 (C128 extended
-keys) are unmapped pending hardware verification.
-
-What's verified
----------------
-Compiles clean for both the 328 and 328P; the HID report descriptor was
-byte-checked (45 bytes, balanced, valid boot keyboard). USB enumeration and the
-latch handshake are validated on real hardware during bring-up (V-USB traffic
-can't be exercised in the build tools here).
+keys) are unmapped by default — see the Cart README to enable that scan.
