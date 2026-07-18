@@ -68,7 +68,10 @@ A single cartridge PCB hosting the ROM, glue logic, and USB MCU. Provides:
 
 ## Firmware
 
-Firmware is not yet written. Planned behavior:
+Both firmwares are implemented in `Firmware/` (see `Firmware/README.md` for the
+build/flash/bring-up plan). The C64 and C128 ROM banks autostart and render the
+splash (verified in VICE); the ATmega328/328P V-USB controller compiles clean.
+Behavior:
 
 **6502 side (per bank):**
 - Autostart via `CBM80` signature (C64) or `CBM` / `$01` byte (C128 bank); clear screen, print a banner via `CHROUT`, then enter an infinite keyboard-scan loop.
