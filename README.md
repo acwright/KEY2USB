@@ -15,6 +15,7 @@ A non-invasive **Commodore 64 / C128** expansion port cartridge that lets the ma
   - [KEY2USB Board](#key2usb-board)
     - [Revision History](#revision-history)
 - [Firmware](#firmware)
+- [VICE Setup](#vice-setup)
 - [CAD](#cad)
 - [Production](#production)
 - [Schematics](#schematics)
@@ -69,9 +70,11 @@ A single cartridge PCB hosting the ROM, glue logic, and USB MCU. Provides:
 ## Firmware
 
 Both firmwares are implemented in `Firmware/` (see `Firmware/README.md` for the
-build/flash/bring-up plan). The C64 and C128 ROM banks autostart and render the
-splash (verified in VICE); the ATmega328/328P V-USB controller compiles clean.
-Behavior:
+build/flash/bring-up plan). **Confirmed working end-to-end on a real C64
+Ultimate**: the cartridge autostarts, shows the splash, and delivers keystrokes
+over USB into VICE (see [VICE Setup](#vice-setup) below — a keymap setting is
+required). The C128 bank has been verified to autostart and render its splash
+in emulation; hardware confirmation on a real C128 is still pending. Behavior:
 
 **6502 side (per bank):**
 - Autostart via `CBM80` signature (C64) or `CBM` / `$01` byte (C128 bank); clear screen, print a banner via `CHROUT`, then enter an infinite keyboard-scan loop.
@@ -83,6 +86,25 @@ Behavior:
 - Poll `RDY`; on set, read the key byte from `PINC`/`PINB`, pulse `/CLRRDY`.
 - Run V-USB (low-speed USB 1.1); translate to USB HID keycodes and send an 8-byte boot-protocol keyboard report.
 - Configured as a self-powered USB device.
+
+## VICE Setup
+
+**Confirmed working on a real C64 Ultimate + VICE.** One setting trips people up
+every time, so set it before anything else:
+
+- **Keyboard mapping must be Positional, not Symbolic.** KEY2USB sends raw
+  physical key positions (and the raw SHIFT/CTRL/C= state) over USB, the same
+  way a real C64 keyboard's matrix works — it does not translate to characters.
+  VICE's default/Symbolic keymap assumes a host keyboard layout and will map
+  keys to the wrong C64 characters, or seem to "not work," even though every
+  keystroke is arriving correctly. In VICE: **Settings → Keyboard → Keyboard
+  Mapping → Positional**. This is the single most common first-time setup
+  mistake — if keys look wrong, check this first.
+- **PAL vs. NTSC does not matter.** That setting only affects VIC-II video
+  timing (cycles per line, refresh rate); the keyboard matrix and CIA #1 are
+  identical either way, so KEY2USB works under both.
+- USB HID reports are sent as a standard boot-protocol keyboard — no special
+  VICE driver or configuration is needed beyond the keymap.
 
 ## CAD
 `CAD/`

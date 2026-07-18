@@ -56,13 +56,18 @@ still need confirmation on real C128 hardware.
 
 What's verified
 ---------------
-Both banks were booted in VICE (`x64sc`, `x128 -40col`): autostart triggers, the
-system is brought up correctly (the C64 bank calls `IOINIT/RAMTAS/RESTOR/CINT`;
-both banks then force a known 40-col VIC-II screen — required on C128, where the
-function ROM runs before the editor is initialised), and the centered splash
-renders. The matrix-scan → `$DE00` emission path can only be exercised on real
-hardware (VICE can't inject matrix-level keypresses headlessly) — verify it with
-a logic analyzer on `/IO1`/`R/W`/`D0-D7` during bring-up.
+**C64 bank: confirmed end-to-end on a real C64 Ultimate** — autostart, splash,
+matrix scan, and `$DE00` event emission all working, delivering real keystrokes
+through the Controller into VICE.
+
+Both banks were also booted in VICE (`x64sc`, `x128 -40col`) during development:
+autostart triggers, the system is brought up correctly (the C64 bank calls
+`IOINIT/RAMTAS/RESTOR/CINT`; both banks then force a known 40-col VIC-II
+screen — required on C128, where the function ROM runs before the editor is
+initialised), and the centered splash renders.
+
+Still to confirm: the **C128 bank** on real C128 hardware (verified in `x128`
+emulation only so far), and the C128 extended-key (`$D02F`) labels.
 
 Notes
 -----
