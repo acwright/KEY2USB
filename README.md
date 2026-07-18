@@ -89,8 +89,7 @@ in emulation; hardware confirmation on a real C128 is still pending. Behavior:
 
 ## VICE Setup
 
-**Confirmed working on a real C64 Ultimate + VICE.** One setting trips people up
-every time, so set it before anything else:
+One setting trips people up every time, so set it before anything else:
 
 - **Keyboard mapping must be Positional, not Symbolic.** KEY2USB sends raw
   physical key positions (and the raw SHIFT/CTRL/C= state) over USB, the same
