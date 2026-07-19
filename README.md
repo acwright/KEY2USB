@@ -3,14 +3,17 @@ KEY2USB
 
 ![KEY2USB](./Images/KEY2USB.png)
 
-A non-invasive **Commodore 64 / C128** expansion port cartridge that lets the machine's own physical keyboard act as a **USB HID keyboard** for a connected PC running the VICE emulator. Plug it in, power on the C64, connect a USB cable — no case modification, no soldering into the keyboard.
+A non-invasive **Commodore 64** expansion port cartridge that lets the machine's own physical keyboard act as a **USB HID keyboard** for a connected PC running the VICE emulator. Plug it in, power on the C64, connect a USB cable — no case modification, no soldering into the keyboard.
 
 ---
 
 ## Table of Contents
 
 - [Overview](#overview)
+- [Compatibility](#compatibility)
+- [Quick Start](#quick-start)
 - [Architecture](#architecture)
+- [Mode Jumper](#mode-jumper)
 - [Hardware](#hardware)
   - [KEY2USB Board](#key2usb-board)
     - [Revision History](#revision-history)
@@ -29,17 +32,70 @@ A non-invasive **Commodore 64 / C128** expansion port cartridge that lets the ma
 
 **KEY2USB** is a C64 cartridge that solves a specific problem: when running the VICE emulator on a PC alongside a real Commodore 64, you can't easily use the C64's authentic keyboard as a USB input device without modifying the machine. KEY2USB plugs into the expansion port and bridges the C64's keyboard matrix — read by the C64's own 6502 — to a USB HID keyboard interface, using no invasive hardware modifications.
 
-Compatible with the **Commodore 64**, **Commodore 128** (in C64 or native mode), and the **Ultimate 64** FPGA board.
+Nothing inside the machine is touched. The cartridge takes over the C64 on power-up, scans the keyboard matrix itself, and reports every make/break to the PC as a standard USB HID boot keyboard. Power comes from the expansion port; the only cable is USB.
+
+## Compatibility
+
+| Machine | Supported | Notes |
+|---------|-----------|-------|
+| **Commodore 64** (all revisions) | Yes | Primary target |
+| **Commodore 64C** | Yes | Identical keyboard matrix |
+| **Commodore 128 / 128D** | Yes | Runs in C64 mode — see below. Verified on real hardware |
+| **Ultimate 64** | Yes | Verified on real hardware |
+
+On a **C128**, the cartridge asserts `/EXROM`, which the C128 detects at reset and
+uses to boot straight into C64 mode — so KEY2USB comes up on its own with no key
+combination needed. The full C128 keyboard is *not* scanned: the extra keys
+(numeric keypad, ESC, TAB, ALT, HELP, and the separate cursor pad) sit outside the
+standard 8×8 matrix and are not reported. Every key the C128 shares with the C64
+works normally.
+
+If a particular C128 does not autostart, power on while holding the **C=** key to
+force C64 mode.
+
+## Quick Start
+
+1. With the C64 **powered off**, insert KEY2USB into the expansion port.
+2. Connect the USB cable to your PC. The device enumerates as a standard HID
+   keyboard — no drivers needed.
+3. Power on the C64. The `KEY2USB` splash screen appears; the cartridge has taken
+   over the machine and is scanning the keyboard.
+4. In VICE, set **Settings → Keyboard → Keyboard Mapping → Positional**. This step
+   is mandatory — see [VICE Setup](#vice-setup).
+5. Type on the C64. Keystrokes arrive at the PC.
+
+While KEY2USB is running, the C64 is dedicated to being a keyboard — it does not
+return to BASIC. Power off and remove the cartridge to use the machine normally.
 
 ## Architecture
 
-- **ROM side**: A 28C64 EEPROM holds two 4K firmware banks (C64 / C128). The bank and `/EXROM` state are selected together by a single `MODE` jumper.
+- **ROM side**: A 28C64 EEPROM holds two 4K firmware banks. The bank and `/EXROM` state are selected together by a single `MODE` jumper, set to **C64** on shipping units — see [Mode Jumper](#mode-jumper).
 - **Glue logic**: A 74LS32 (quad OR gate) generates a write strobe from `/IO1` + `R/W`; a 74LS273 (8-bit D flip-flop register) latches the key-event byte the 6502 firmware writes to `$DE00`; a 74LS74 (dual D flip-flop) provides a single `RDY` handshake flag.
 - **USB side**: An ATmega328P-PU runs the [V-USB](https://www.obdev.at/products/vusb/index.html) software USB stack, polls the latch via the `RDY` flag, and sends 8-byte USB HID boot-protocol keyboard reports. A 16 MHz crystal clocks the MCU.
 - **USB front end**: Two 68Ω series resistors on D+ and D−, two 1N5227B (3.6V) Zener diodes to clamp the lines to spec, and a 1.5kΩ D− pull-up to +5V to signal a low-speed USB device — no 3.3V rail needed.
 - **PCB constraint**: 100% through-hole / DIP — no SMD parts.
 
 The two sides share only a single byte-wide latch and one ready flag — no shared clock or bus timing requirements.
+
+## Mode Jumper
+
+The board carries a 3-pin `MODE` header (J1) that selects the EEPROM bank and the
+`/EXROM` state together:
+
+| Jumper position | EEPROM bank | `/EXROM` | Behavior |
+|-----------------|-------------|----------|----------|
+| **C64** (GND) — *factory default* | Lower 4K | Asserted | Autostarts via the `CBM80` signature. On a C128, forces a boot into C64 mode. |
+| **C128** (+5V) | Upper 4K | Released | Autostarts as a C128 external function ROM in native mode. |
+
+**Assembled cartridges ship with the jumper set to C64 and the case closed over
+it.** The C64 bank is the supported configuration; it covers the C64, C64C, Ultimate 64, 
+and the C128 by way of C64 mode. There is no need to change it, and the case has no opening for it.
+
+The C128 bank is retained for developers and the curious. It is stable for the
+standard 8×8 matrix — the same key coverage the C64 bank provides — but it offers
+no advantage over C64 mode, since scanning of the C128-only extended keys is
+incomplete and disabled. Changing the jumper means opening the case, and is
+entirely at your own discretion.
 
 ## Hardware
 
@@ -50,14 +106,14 @@ This repository contains the KiCad 10.0 PCB design for the KEY2USB board.
 
 A single cartridge PCB hosting the ROM, glue logic, and USB MCU. Provides:
 
-- **ROM**: 28C64 EEPROM (DIP-28) preloaded with C64 and C128 keyboard-scan firmware
+- **ROM**: 28C64 EEPROM (DIP-28) preloaded with the keyboard-scan firmware
 - **Write strobe**: 74LS32 quad OR gate — asserts `WRSTB` from `/IO1` + `R/W`
 - **Key-event latch**: 74LS273 octal D flip-flop register — captures the byte written to `$DE00`
 - **Handshake flag**: 74LS74 dual D flip-flop — one half as the `RDY`/`/CLRRDY` flag
 - **USB MCU**: ATmega328P-PU (DIP-28) running V-USB, reads the latch, emits USB HID reports
 - **Crystal**: 16 MHz THT crystal + 2× 20pF load capacitors
 - **USB front end**: USB Type B connector, 68Ω series resistors, 1N5227B Zener clamps, 1.5kΩ D− pull-up
-- **Mode select**: 3-pin 2.54mm jumper header — selects C64 mode (GND, asserts `/EXROM`, lower 4K EEPROM bank) or C128 mode (+5V, releases `/EXROM`, upper 4K EEPROM bank)
+- **Mode select**: 3-pin 2.54mm jumper header — set to C64 at the factory (GND, asserts `/EXROM`, lower 4K EEPROM bank); see [Mode Jumper](#mode-jumper)
 - **Bus connection**: 44-pin C64 expansion port edge connector
 - **Power**: Drawn from the C64's own +5V via the expansion port
 
@@ -73,11 +129,15 @@ Both firmwares are implemented in `Firmware/` (see `Firmware/README.md` for buil
 flash, and layout details). Set VICE's keyboard mapping to **Positional** — see
 [VICE Setup](#vice-setup).
 
-**6502 side (per bank):**
-- Autostart via the `CBM80` signature (C64) or `CBM` / `$01` header (C128 bank), take over the machine, and draw a centered `KEY2USB` splash on the 40-column screen.
-- Scan the keyboard matrix directly via CIA #1 (`$DC00`/`$DC01`) for raw make/break events and modifier state — no KERNAL buffer.
+**6502 side (C64 bank — the shipping configuration):**
+- Autostart via the `CBM80` signature, take over the machine, and draw a centered `KEY2USB` splash on the 40-column screen.
+- Scan the 8×8 keyboard matrix directly via CIA #1 (`$DC00`/`$DC01`) for raw make/break events and modifier state — no KERNAL buffer.
 - On any key state change, write a one-byte event to `$DE00`.
-- Optionally (off by default), the C128 bank can also scan the extended keys — numeric keypad, ESC, TAB, ALT, HELP, and cursor pad — via `$D02F`.
+
+The upper bank holds the C128 native-mode firmware, which autostarts from a
+`CBM` / `$01` external function ROM header and scans the same 8×8 matrix. Extended-key
+scanning via `$D02F` is present in the source but gated behind a build flag and not
+compiled in — it is unverified on hardware. See `Firmware/Cart/README.md`.
 
 **ATmega328/328P side:**
 - Poll `RDY`; on set, read the key byte from `PINC`/`PINB`, pulse `/CLRRDY`.
@@ -129,7 +189,7 @@ Custom KiCad symbol and footprint libraries, including the C64 expansion port ed
 | C1, C2, C3, C4 | 4 | 100nF | Ceramic disc capacitor — IC bypass | [478-5732-ND](https://www.digikey.com/en/products/filter?keywords=478-5732-ND) |
 | C5, C6 | 2 | 20pF | Ceramic disc capacitor — crystal load | [478-7724-ND](https://www.digikey.com/en/products/filter?keywords=478-7724-ND) |
 | D1, D2 | 2 | 1N5227B | 3.6V Zener diode, DO-35 — USB line clamp | [1N5227B-ND](https://www.digikey.com/en/products/filter?keywords=1N5227B-ND) |
-| J1 | 1 | MODE | 3-pin 2.54mm header + jumper cap — C64 / C128 mode select | [S1121EC-03-ND](https://www.digikey.com/en/products/filter?keywords=S1121EC-03-ND) |
+| J1 | 1 | MODE | 3-pin 2.54mm header + jumper cap — mode select, factory-set to C64 | [S1121EC-03-ND](https://www.digikey.com/en/products/filter?keywords=S1121EC-03-ND) |
 | J2 | 1 | C64 EXP PORT | C64 expansion port edge connector (44-pin, 3.96mm pitch) | |
 | J3 | 1 | USB | USB Type B connector, through-hole (UJ2-BH-BL1-TH) | [102-5886-ND](https://www.digikey.com/en/products/filter?keywords=102-5886-ND) |
 | R1, R2 | 2 | 68Ω | Resistor, 1/4W — USB D+ / D− series | [S68CACT-ND](https://www.digikey.com/en/products/filter?keywords=S68CACT-ND) |
