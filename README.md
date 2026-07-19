@@ -19,6 +19,9 @@ A non-invasive **Commodore 64** expansion port cartridge that lets the machine's
     - [Revision History](#revision-history)
 - [Firmware](#firmware)
 - [VICE Setup](#vice-setup)
+  - [Joysticks](#joysticks)
+  - [Verifying your setup](#verifying-your-setup)
+- [Software](#software)
 - [CAD](#cad)
 - [Production](#production)
 - [Schematics](#schematics)
@@ -132,7 +135,8 @@ flash, and layout details). Set VICE's keyboard mapping to **Positional** — se
 **6502 side (C64 bank — the shipping configuration):**
 - Autostart via the `CBM80` signature, take over the machine, and draw a centered `KEY2USB` splash on the 40-column screen.
 - Scan the 8×8 keyboard matrix directly via CIA #1 (`$DC00`/`$DC01`) for raw make/break events and modifier state — no KERNAL buffer.
-- On any key state change, write a one-byte event to `$DE00`.
+- Scan **both joystick ports** on the same CIA #1 ports (they share the matrix lines, so no extra hardware is involved).
+- On any key or joystick state change, write a one-byte event to `$DE00`.
 
 The upper bank holds the C128 native-mode firmware, which autostarts from a
 `CBM` / `$01` external function ROM header and scans the same 8×8 matrix. Extended-key
@@ -161,6 +165,67 @@ One setting trips people up every time, so set it before anything else:
   identical either way, so KEY2USB works under both.
 - USB HID reports are sent as a standard boot-protocol keyboard — no special
   VICE driver or configuration is needed beyond the keymap.
+
+### Joysticks
+
+Both joystick ports are scanned by the cartridge and arrive at the host as
+**ordinary keystrokes**, so VICE has to be told which keys mean "joystick".
+Everything lives on the numeric keypad, split so the two ports cannot collide:
+
+**Port 2** — the easy one, no configuration at all:
+
+> **Settings → Joystick → Joystick Port #2 → Numpad**
+
+VICE's built-in Numpad device already maps keypad digits (`8/2/4/6` for
+directions, `7/9/1/3` for diagonals, `0`/`5` for fire), and the cartridge's
+port-2 mapping was chosen to match it exactly.
+
+**Port 1** — needs a keyset, because Numpad can only serve one port:
+
+> **Settings → Joystick → Joystick Port #1 → Keyset A**, then
+> **Configure Keyset A**:
+
+| Direction | Key |
+|-----------|-----|
+| North | Keypad **−** |
+| South | Keypad **+** |
+| West  | Keypad **/** |
+| East  | Keypad **&ast;** |
+| Fire  | Keypad **enter** |
+
+Port 1 uses keypad *symbols* rather than digits or function keys for two
+reasons: the digits are already claimed by the Numpad device serving port 2,
+and the function-key row proved unreliable — F12 was silently undeliverable on
+a macOS + GTK3 VICE host, with no identifiable cause. The symbols are untouched
+by both.
+
+### A caveat worth knowing
+
+A held joystick direction grounds a line in the keyboard matrix, so it also
+**phantom-presses real keys** — exactly as it does on a real C64. This is
+inherent to the wiring, not a firmware choice, and it is left in place so the
+cartridge behaves like the bare machine.
+
+It hits **port 1** hardest: a held direction grounds a matrix *row*, pressing
+all 8 keys in it — which includes RETURN, INST/DEL and CLR/HOME. Expect stray
+keystrokes while a port-1 direction is held. **Port 2 is the one to use in
+practice**; it grounds a column instead, which only aliases if you are also
+pressing a key in that same column.
+
+### Verifying your setup
+
+`Software/key2usbtest.prg` shows live joystick state for both ports plus the
+last keys received, so you can confirm the cartridge and your VICE
+configuration in one place. See [Software/](Software/).
+
+## Software
+`Software/`
+
+Host-side test software. `key2usbtest.prg` runs inside VICE and shows live
+joystick state for both ports plus the last keystrokes received, so you can
+verify a cartridge and your VICE configuration in one place. Build with
+`make` (requires `petcat`, which ships with VICE) or use the prebuilt `.prg`.
+See [Software/README.md](Software/README.md).
 
 ## CAD
 `CAD/`

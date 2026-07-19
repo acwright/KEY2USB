@@ -5,7 +5,8 @@
  *  the 74LS273 each time the 6502 writes to $DE00; the 74LS74 raises RDY.
  *
  *      bit 7      : 1 = key pressed (make), 0 = key released (break)
- *      bits 6..0  : keyID  (C64 matrix = col*8+row, 0..63; C128 ext = 64..)
+ *      bits 6..0  : keyID  (C64 matrix = col*8+row, 0..63; C128 ext = 64..;
+ *                           joystick port 2 = 112..116, port 1 = 120..124)
  *
  *  Pin contract (verified against Hardware/KEY2USB.kicad_sch, U5):
  *      KB0..KB5 -> PC0..PC5      KB6..KB7 -> PB0..PB1
@@ -19,6 +20,19 @@
 
 #define EV_PRESSED   0x80        /* bit 7 of the event byte */
 #define EV_KEYID(b)  ((b) & 0x7F)
+
+/* Joystick keyIDs (mirror of JOY2_BASE / JOY1_BASE in Cart/Cart.inc).
+ * Contacts arrive as ordinary key events; the keymap decides what they type. */
+#define JOY2_UP      112
+#define JOY2_DOWN    113
+#define JOY2_LEFT    114
+#define JOY2_RIGHT   115
+#define JOY2_FIRE    116
+#define JOY1_UP      120
+#define JOY1_DOWN    121
+#define JOY1_LEFT    122
+#define JOY1_RIGHT   123
+#define JOY1_FIRE    124
 
 #define RDY_PIN      PD4
 #define CLRRDY_PIN   PD5

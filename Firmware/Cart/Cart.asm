@@ -11,9 +11,9 @@
 ;   1. Takes over the machine (autostart), masks IRQ, ignores RESTORE (NMI).
 ;   2. Draws a "KEY2USB <version>" splash on the 40-column screen (feedback
 ;      only - the cartridge works headless).
-;   3. Continuously scans the CIA#1 keyboard matrix and, on every make/break
-;      transition, writes an event byte to $DE00. The 74LS273 latches it and
-;      the ATmega picks it up over the RDY handshake.
+;   3. Continuously scans the CIA#1 keyboard matrix and both joystick ports and,
+;      on every make/break transition, writes an event byte to $DE00. The
+;      74LS273 latches it and the ATmega picks it up over the RDY handshake.
 ;
 ; The 6502 cannot read the RDY flag back, so after every $DE00 write it waits
 ; ~2 ms (emit pacing) to guarantee the ATmega has consumed the previous byte
@@ -23,7 +23,8 @@
 .include "Cart.inc"
 
 VERSION_MAJOR = 1
-VERSION_MINOR = 0
+VERSION_MINOR = 1
+VERSION_PATCH = 0
 
 ; ---------------------------------------------------------------------------
 ; Build option: C128 extended-key scan (numeric keypad / ESC / TAB / ALT /
@@ -77,6 +78,10 @@ keybase:   .res 1                       ; keyID base for the current column (col
 idx:       .res 1                       ; outer loop column index
 prevstate: .res 8                       ; previous pressed bitmap per matrix column
 prevext:   .res 3                       ; previous pressed bitmap per C128 K-column
+joy2cur:   .res 1                       ; this scan's closed contacts, joy port 2
+joy1cur:   .res 1                       ; this scan's closed contacts, joy port 1
+prevjoy2:  .res 1                       ; previous closed-contact bitmap, port 2
+prevjoy1:  .res 1                       ; previous closed-contact bitmap, port 1
 
 ; =============================================================================
 ;   Code
@@ -160,11 +165,19 @@ coldstart:
 @ze:    sta     prevext,x
         dex
         bpl     @ze
+        sta     prevjoy2
+        sta     prevjoy1
 
 ; -----------------------------------------------------------------------------
 ;   Main loop: scan, emit events, repeat at ~10 ms intervals (debounce).
 ; -----------------------------------------------------------------------------
 mainloop:
+        ; Joysticks first, deliberately. A held port-1 direction grounds a row
+        ; line and phantom-presses all 8 keys in that row; the HID boot report
+        ; carries only 6 non-modifier keys, so if the matrix scan emits first
+        ; it fills every slot and the real joystick event gets dropped on the
+        ; ATmega side. Emitting the stick first lets it claim a slot.
+        jsr     scan_joystick
         jsr     scan_matrix
 .ifdef TARGET_C128
 .ifdef SCAN_EXTENDED
@@ -251,6 +264,70 @@ scan_extended:
 .endif
 
 ; -----------------------------------------------------------------------------
+;   scan_joystick - read both joystick ports and emit events on any change.
+;
+;   Port A must be switched to INPUTS for this. During the matrix scan DDRA is
+;   $FF, so PA0..PA4 are push-pull outputs driving high, and a joystick contact
+;   shorting one to ground does NOT read back as low - the read returns the
+;   driven/latched level, so port 2 looks permanently idle. (This is why every
+;   stock C64 joystick routine clears DDRA before reading $DC00.) Port B is
+;   already all-inputs for the row read, but it is sampled in the same window
+;   so both ports share one instant.
+;
+;   With DDRA = $00 no column is driven at all, so a pressed key cannot pull
+;   either port low and keys never phantom-press the stick. The reverse
+;   crosstalk (a held stick aliasing into the keyboard scan) is inherent to the
+;   wiring and is left in place - see Cart.inc.
+;
+;   The settle delay matters: as inputs the lines rise only through the CIA's
+;   passive pull-ups against joystick cable capacitance, which is far slower
+;   than a driven edge. Reading too early samples the falling remnant of the
+;   last column drive and invents contacts.
+;
+;   Bits 5..7 read high on both ports (nothing drives them low), so they invert
+;   to 0 and never emit - but mask anyway to keep the contract explicit.
+; -----------------------------------------------------------------------------
+scan_joystick:
+        lda     #$ff
+        sta     CIA1_PRA                ; park the column latch high
+        lda     #$00
+        sta     CIA1_DDRA               ; PA -> inputs so contacts can pull low
+        ldx     #16                     ; ~80 cycles for the pull-ups to settle
+@settle:
+        dex
+        bne     @settle
+        lda     CIA1_PRA                ; joystick 2 on PA0..PA4
+        eor     #$ff                    ; 1 = contact closed
+        and     #JOY_MASK
+        sta     joy2cur
+        lda     CIA1_PRB                ; joystick 1 on PB0..PB4
+        eor     #$ff
+        and     #JOY_MASK
+        sta     joy1cur
+        lda     #$ff
+        sta     CIA1_DDRA               ; restore column drive for scan_matrix
+
+        ; --- port 2 ---
+        lda     joy2cur
+        sta     curpress
+        lda     #JOY2_BASE
+        sta     keybase
+        lda     prevjoy2                ; old bitmap into A for process_column
+        ldx     joy2cur                 ; (ldx/stx leave A untouched)
+        stx     prevjoy2
+        jsr     process_column
+
+        ; --- port 1 ---
+        lda     joy1cur
+        sta     curpress
+        lda     #JOY1_BASE
+        sta     keybase
+        lda     prevjoy1
+        ldx     joy1cur
+        stx     prevjoy1
+        jmp     process_column          ; tail call - process_column rts's for us
+
+; -----------------------------------------------------------------------------
 ;   process_column - emit make/break events for the changed bits of a column.
 ;     entry: A        = previous pressed bitmap
 ;            curpress = current  pressed bitmap
@@ -286,11 +363,26 @@ process_column:
 
 ; -----------------------------------------------------------------------------
 ;   emit_event - write one event byte to the latch, then pace ~2 ms.
-;     entry: A = event byte.
+;     entry: A = event byte.  Preserves Y; destroys A and X.
+;
+;   Y MUST survive: process_column keeps its row index in Y across this call,
+;   and the pacing delay below uses Y as its own loop counter. Without the
+;   save/restore the delay returns Y = 0, so the second and every later event
+;   in one column is emitted as keyID keybase+1 instead of keybase+row. That
+;   only shows up when two keys in the same column change within one scan -
+;   uncommon when typing, but constant for a joystick (every diagonal moves
+;   two bits at once).
 ; -----------------------------------------------------------------------------
 emit_event:
         sta     IO1                     ; latch byte + set RDY (74LS273 / 74LS74)
-        ; fall through into a ~2 ms pacing delay
+        tya
+        pha
+        jsr     delay_2ms
+        pla
+        tay
+        rts
+
+; ~2 ms pacing delay. Destroys A, X, Y.
 delay_2ms:
         ldy     #4
 @a:     ldx     #250
@@ -354,11 +446,11 @@ draw_banner:
         cpx     #7
         bne     @l1
 
-        ldx     #0                      ; version @ row 13, col 18
+        ldx     #0                      ; version @ row 13, col 17
 @l2:    lda     banner_ver,x
-        sta     SCREEN + (13*40 + 18),x
+        sta     SCREEN + (13*40 + 17),x
         inx
-        cpx     #4
+        cpx     #6
         bne     @l2
 
         ldx     #0                      ; mode line @ row 15
@@ -385,7 +477,8 @@ extmask:   .byte $FE,$FD,$FB
 
 ; Screen-code text (uppercase/graphics set: A-Z = 1-26, 0-9 = $30-$39).
 banner_title: .byte 11,5,25,50,21,19,2          ; "KEY2USB"
-banner_ver:   .byte 22, $30+VERSION_MAJOR, 46, $30+VERSION_MINOR  ; "V1.0"
+              ; "V1.1.0" - V=22, '.'=46, digits = $30+n
+banner_ver:   .byte 22, $30+VERSION_MAJOR, 46, $30+VERSION_MINOR, 46, $30+VERSION_PATCH
 
 .ifdef TARGET_C128
 banner_mode:  .byte 3,49,50,56,32,13,15,4,5     ; "C128 MODE"

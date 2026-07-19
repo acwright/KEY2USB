@@ -30,6 +30,8 @@
 
 #include <avr/pgmspace.h>
 
+#include "protocol.h"   /* JOY2_* / JOY1_* keyIDs */
+
 /* Common HID usages for readability. */
 #define HID_NONE      0x00
 #define HID_A         0x04
@@ -46,6 +48,20 @@
 #define HID_LCTRL     0xE0
 #define HID_LSHIFT    0xE1
 #define HID_RSHIFT    0xE5
+
+/* Numeric keypad (note: on some hosts these depend on NumLock being on). */
+#define HID_KP_0      0x62
+#define HID_KP_2      0x5A
+#define HID_KP_4      0x5C
+#define HID_KP_6      0x5E
+#define HID_KP_8      0x60
+/* Keypad symbols. VICE's built-in Numpad joystick device claims only KP 0-9
+ * (digits = 8 directions + fire), so these never collide with it. */
+#define HID_KP_SLASH  0x54
+#define HID_KP_STAR   0x55
+#define HID_KP_MINUS  0x56
+#define HID_KP_PLUS   0x57
+#define HID_KP_ENTER  0x58
 
 /* keyID (col*8+row) -> HID usage. 128 entries; 64..127 reserved for C128
  * extended keys, left unmapped until verified on real C128 hardware. */
@@ -116,6 +132,44 @@ static const uint8_t keymap[128] PROGMEM = {
     /* 63 RUN/STOP   */ HID_ESC,
     /* 64..127 : C128 extended keys - fill after hardware verification */
     [64 ... 127] = HID_NONE,
+
+    /* --- Joysticks (later designators override the HID_NONE range above) ---
+     * The cartridge reports joystick contacts as ordinary key events, so the
+     * host sees plain keystrokes. Point VICE at them with
+     * Settings -> Joystick -> Keyset A / Keyset B.
+     *
+     * Both ports use usages that NO matrix key above can produce. That matters
+     * for port 1: a held direction grounds a row line and phantom-presses all
+     * 8 keys in that row, so mapping it to letters (W/S/A/D) made the stick
+     * indistinguishable from its own crosstalk - pressing left produced
+     * A, D, G, J, L, which is exactly row 2 of the matrix. F8..F12 and the
+     * keypad never appear in the keyboard table, so they are unambiguous.
+     */
+    [JOY2_UP]    = HID_KP_8,
+    [JOY2_DOWN]  = HID_KP_2,
+    [JOY2_LEFT]  = HID_KP_4,
+    [JOY2_RIGHT] = HID_KP_6,
+    [JOY2_FIRE]  = HID_KP_0,
+
+    [JOY1_UP]    = HID_KP_MINUS,   /* KP -     */
+    [JOY1_DOWN]  = HID_KP_PLUS,    /* KP +     */
+    [JOY1_LEFT]  = HID_KP_SLASH,   /* KP /     */
+    [JOY1_RIGHT] = HID_KP_STAR,    /* KP *     */
+    [JOY1_FIRE]  = HID_KP_ENTER,   /* KP enter */
 };
+
+/* Why port 1 is on keypad symbols rather than function keys:
+ * F12 proved undeliverable on a macOS + GTK3 VICE host. Verified on hardware
+ * 2026-07-19 - F8/F9/F10/F11 all registered, F12 never did, including when
+ * pressed directly on the host keyboard with the cartridge disconnected. Ruled
+ * out: the "use F-keys as standard function keys" setting (enabled), macOS
+ * symbolic hotkeys (nothing bound to keycode 111), VICE hotkey files (all F9+
+ * bindings are Alt/Command-gated) and the SDL menu key (this is a GTK3 build).
+ * Root cause never identified, so port 1 avoids the function-key row entirely.
+ *
+ * Keypad DIGITS are not an option: VICE's Numpad joystick device (the port-2
+ * setting) claims KP 7/9/1/3 for diagonals and KP 0/5 for fire, so digits
+ * would cross-trigger between the two ports. The symbols are untouched by it.
+ * They also sit sensibly on the keypad: / left of *, and - above +. */
 
 #endif /* KEY2USB_KEYMAP_H */

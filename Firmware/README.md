@@ -20,7 +20,14 @@ the keyID → USB HID mapping.
 Event byte (`$DE00` → latch → ATmega):
 
     bit 7      1 = pressed (make), 0 = released (break)
-    bits 6..0  keyID  (C64 matrix code col*8+row, 0..63; C128 extended 64+)
+    bits 6..0  keyID   0..63    C64 matrix, col*8+row
+                       64..87   C128 extended keys (optional scan)
+                       112..116 joystick port 2 (up/down/left/right/fire)
+                       120..124 joystick port 1 (up/down/left/right/fire)
+
+Both joystick ports are scanned alongside the matrix — they already sit on
+CIA#1, so this needs no extra hardware. Contacts are reported as ordinary key
+events; `Controller/src/keymap.h` decides what they type.
 
 Build and flash
 ---------------

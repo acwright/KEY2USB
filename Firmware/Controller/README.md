@@ -80,5 +80,48 @@ VICE positional:
     C64 £     -> HID End          C64 =         -> HID Page Down
     C64 up    -> HID '\'          C64 left      -> HID '`'
 
-Edit the table freely for other hosts/emulators. keyIDs 64–127 (C128 extended
+Edit the table freely for other hosts/emulators. keyIDs 64–87 (C128 extended
 keys) are unmapped by default — see the Cart README to enable that scan.
+
+Joysticks
+---------
+Both joystick ports are scanned by the cartridge and arrive as ordinary key
+events, so the host just sees keystrokes. Defaults:
+
+| Port | keyIDs | Up | Down | Left | Right | Fire |
+|------|--------|----|------|------|-------|------|
+| 2    | 112–116| Keypad 8 | Keypad 2 | Keypad 4 | Keypad 6 | Keypad 0 |
+| 1    | 120–124| Keypad − | Keypad + | Keypad / | Keypad &ast; | Keypad enter |
+
+Port 1 avoids the function-key row because **F12 proved undeliverable on a
+macOS + GTK3 VICE host** (verified 2026-07-19: F8–F11 all registered, F12 never
+did — including pressed directly on the host keyboard with the cartridge
+unplugged). The standard-function-keys setting, macOS symbolic hotkeys, VICE's
+hotkey files and the SDL menu key were all ruled out; the root cause was never
+found, so port 1 steers clear of that row entirely.
+
+Keypad **digits** are equally unusable: VICE's Numpad device — the port-2
+setting — claims KP 7/9/1/3 for diagonals and KP 0/5 for fire, so digits would
+cross-trigger between the two ports. Only the symbols are free, and they sit
+sensibly on the pad (`/` left of `*`, `−` above `+`).
+
+Point VICE at them with **Settings → Joystick → Keyset A / Keyset B**, then
+assign the keyset to the emulated port.
+
+Both sets use usages that **no matrix key can produce**, which is deliberate.
+A held port-1 direction grounds a row line and phantom-presses all 8 keys in
+that row, so an earlier mapping to `W/S/A/D` was indistinguishable from the
+stick's own crosstalk — pressing left emitted `A, D, G, J, L`, which is exactly
+row 2 of the C64 matrix. F8–F12 and the keypad never appear in the keyboard
+table above, so they are unambiguous.
+
+Two things to know:
+
+- **Keypad usages can depend on NumLock** on some hosts. If port 2 misbehaves,
+  either switch NumLock on or retarget those five entries.
+- The HID boot keyboard reports **6 non-modifier keys at once**, and
+  `keyDown()` silently drops past six. This is why the cartridge scans the
+  joysticks *before* the matrix: a held port-1 direction generates 8 phantom
+  key events, which would otherwise claim every slot and starve the real
+  joystick event. Port 1 remains inherently noisy — the phantoms are genuine
+  C64 behaviour — so port 2 is the one to use in practice.

@@ -3,9 +3,9 @@ KEY2USB — Cartridge ROM (6502)
 
 Autostart ROM for the KEY2USB expansion-port cartridge. It takes over the
 C64/C128, shows a `KEY2USB` splash, then continuously scans the CIA#1 keyboard
-matrix and writes a make/break **event byte** to `$DE00` (`/IO1`) on every key
-transition. The 74LS273 latches the byte and the 74LS74 raises `RDY` for the
-ATmega328 controller.
+matrix and both joystick ports, writing a make/break **event byte** to `$DE00`
+(`/IO1`) on every transition. The 74LS273 latches the byte and the 74LS74 raises
+`RDY` for the ATmega328 controller.
 
 Two banks, one source
 ---------------------
@@ -42,11 +42,44 @@ Event byte protocol
 -------------------
 Written to `$DE00`:
 
-    bit 7      1 = key pressed (make), 0 = key released (break)
-    bits 6..0  keyID  (C64 matrix code = col*8 + row, 0..63)
+    bit 7      1 = pressed (make), 0 = released (break)
+    bits 6..0  keyID
 
-`keyID` is exactly the classic C64 KERNAL "keyboard code". The 6502 side is
-matrix-position only; the ATmega owns the keyID → USB HID mapping.
+| keyID     | Source |
+|-----------|--------|
+| `0..63`   | C64 matrix, `col*8 + row` (the classic KERNAL "keyboard code") |
+| `64..87`  | C128 extended keys (optional scan, off by default) |
+| `112..116`| Joystick **port 2** — up, down, left, right, fire |
+| `120..124`| Joystick **port 1** — up, down, left, right, fire |
+
+The 6502 side reports switch positions only; the ATmega owns the keyID → USB
+HID mapping, so joystick contacts arrive at the host as ordinary keystrokes.
+
+Joysticks
+---------
+Both ports share CIA#1 with the keyboard — port 2 on port A (the column drive),
+port 1 on port B (the row read). **No extra hardware is involved** — the DE9
+ports were always on these lines.
+
+Port A must be switched to inputs (`DDRA = $00`) before reading. While the
+matrix scan owns it, `DDRA = $FF` makes PA0–PA4 push-pull outputs and a
+grounded contact does *not* read back as low, so port 2 reads permanently idle
+— this is why every stock C64 joystick routine clears `DDRA` first. Port B is
+already an input. A short settle delay follows the DDR change, because as
+inputs the lines rise only through the CIA's passive pull-ups against joystick
+cable capacitance.
+
+Because no column is driven during the read, a pressed key can never
+phantom-press a joystick contact. The reverse crosstalk is inherent to the
+wiring and is deliberately left alone so the cartridge behaves like the bare
+machine:
+
+- a held **port 2** direction grounds a column line, so keys in that column
+  alias into other columns' row reads;
+- a held **port 1** direction grounds a row line, so that row reads as pressed
+  in *every* column — the classic "stick in port 1 breaks menus" behaviour.
+
+In practice this only matters if you type while holding a direction.
 
 C128 extended keys
 ------------------
@@ -67,3 +100,8 @@ Notes
 - The splash uses a light-blue border / black background / white text so an
   attached monitor gives an obvious "cartridge is alive" indication; the
   cartridge is fully functional headless.
+- `emit_event` must preserve `Y`: `process_column` holds its row index there
+  across the call, while the pacing delay uses `Y` as its own counter. Getting
+  this wrong emits every event after the first in a column as `keybase+1`
+  (fixed in v1.1.0 — it was latent in v1.0, where two same-column keys changing
+  within one 10 ms scan was rare enough to go unnoticed).
