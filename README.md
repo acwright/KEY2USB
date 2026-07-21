@@ -28,6 +28,7 @@ A non-invasive **Commodore 64** expansion port cartridge that lets the machine's
 - [Schematics](#schematics)
 - [Libraries](#libraries)
 - [Bill of Materials](#bill-of-materials)
+- [Purchase](#purchase)
 - [License](#license)
 
 ---
@@ -320,6 +321,13 @@ Custom KiCad symbol and footprint libraries, including the C64 expansion port ed
 | U4 | 1 | 74LS74 | Dual D flip-flop, DIP-14 — RDY handshake flag | [296-1668-5-ND](https://www.digikey.com/en/products/filter?keywords=296-1668-5-ND) |
 | U5 | 1 | ATmega328P-PU | 8-bit AVR MCU, DIP-28 — V-USB and HID firmware | [ATMEGA328-PU-ND](https://www.digikey.com/en/products/filter?keywords=ATMEGA328-PU-ND) |
 | Y1 | 1 | 16 MHz | Crystal, through-hole — ATmega328P clock | [3155-16M20P2/49US-ND](https://www.digikey.com/en/products/filter?keywords=3155-16M20P2/49US-ND) |
+
+## Purchase
+
+KEY2USB is available as a kit on Tindie for those who would rather not order
+boards from a fab and source parts themselves.
+
+<a href="https://www.tindie.com/products/acwrightdesign/key2usb-commodore-64-keyboard-to-usb-kit/?ref=offsite_badges&utm_source=sellers_acwrightdesign&utm_medium=badges&utm_campaign=badge_medium"><img src="https://static.tindie.com/badges/tindie-mediums.png" alt="I sell on Tindie" width="150" height="78"></a>
 
 ## License
 
