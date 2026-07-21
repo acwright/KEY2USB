@@ -21,6 +21,7 @@ A non-invasive **Commodore 64** expansion port cartridge that lets the machine's
 - [VICE Setup](#vice-setup)
   - [Joysticks](#joysticks)
   - [Verifying your setup](#verifying-your-setup)
+  - [VIC-20 (xvic)](#vic-20-xvic)
 - [Software](#software)
 - [CAD](#cad)
 - [Production](#production)
@@ -152,17 +153,32 @@ compiled in — it is unverified on hardware. See `Firmware/Cart/README.md`.
 
 One setting trips people up every time, so set it before anything else:
 
-- **Keyboard mapping must be Positional, not Symbolic.** KEY2USB sends raw
-  physical key positions (and the raw SHIFT/CTRL/C= state) over USB, the same
-  way a real C64 keyboard's matrix works — it does not translate to characters.
-  VICE's default/Symbolic keymap assumes a host keyboard layout and will map
-  keys to the wrong C64 characters, or seem to "not work," even though every
-  keystroke is arriving correctly. In VICE: **Settings → Keyboard → Keyboard
-  Mapping → Positional**. This is the single most common first-time setup
-  mistake — if keys look wrong, check this first.
-- **PAL vs. NTSC does not matter.** That setting only affects VIC-II video
-  timing (cycles per line, refresh rate); the keyboard matrix and CIA #1 are
-  identical either way, so KEY2USB works under both.
+- **Keyboard mapping must be Positional, not Symbolic.** In VICE:
+  **Settings → Keyboard → Keyboard Mapping → Positional**. This is the single
+  most common first-time setup mistake — if keys look wrong, check this first.
+  The reason is worth understanding, because it explains the whole signal path:
+
+  A USB keyboard never transmits characters. Press `A` and it sends HID usage
+  `0x04`; the USB spec names that "Keyboard a and A", but the name is only
+  documentation — the code means *"the key where a US keyboard has A"*. Your OS
+  decides it is an `A` by applying the selected layout. On AZERTY the same key
+  sends the same `0x04` and the OS renders `Q`.
+
+  KEY2USB is positional end to end for exactly that reason. The 6502 detects a
+  key by matrix position (`col*8 + row`) and never computes a character; the
+  ATmega looks that keyID up in `keymap.h` and emits the HID usage for the PC key
+  in the corresponding physical spot; VICE's Positional keymap maps PC positions
+  back onto C64 matrix positions. Positions in, positions through, positions out
+  — nothing resolves to a character until VICE finally does it.
+
+  Symbolic breaks that chain by inserting a translation. Press **SHIFT + 2**,
+  which is `"` on a C64. The cartridge sends shift plus the position code for
+  `2`; the host applies its US layout and concludes you typed `@`. Symbolic then
+  asks "which C64 key produces `@`?" and presses that one — wrong. Positional
+  ignores the character entirely, sees "physical shift + physical 2", and gives
+  you the `"` you actually pressed. The keystroke arrived correctly either way;
+  Symbolic just did an unwanted extra translation using a PC layout that does
+  not match a C64's.
 - USB HID reports are sent as a standard boot-protocol keyboard — no special
   VICE driver or configuration is needed beyond the keymap.
 
@@ -217,6 +233,45 @@ pressing a key in that same column.
 `Software/key2usbtest.prg` shows live joystick state for both ports plus the
 last keys received, so you can confirm the cartridge and your VICE
 configuration in one place. See [Software/](Software/).
+
+### VIC-20 (`xvic`)
+
+The cartridge also drives VICE's VIC-20 emulator, with the same **Positional**
+setting and no keymap changes. This works because VICE's two positional keymaps
+are the same map in different coordinates — `VIC20/gtk3_pos.vkm` states the
+relationship outright:
+
+    # to convert from C64 to VIC20:
+    # change rows 7 -> 0, 0 -> 7
+    # change columns 7 -> 3, 3 -> 7
+
+Applying that permutation and diffing the two files (VICE 3.x, GTK3, US layout)
+gives:
+
+| | |
+|---|---|
+| Host keysyms in each map | 151 / 151 |
+| Present in one but not the other | 0 |
+| Agree under the permutation | 150 |
+| Differ | 1 |
+
+The lone difference is cosmetic: `>` sits at matrix position `5 4` in both, but
+carries shiftflag `1` on the C64 ("combined with shift") and `8` on the VIC-20
+("can be shifted or not"). The cartridge sends the physical `.` key and physical
+SHIFT as separate events, so both yield `>` regardless. The RESTORE entries
+(`Page_Up` / `F12` / `Prior`) and all twenty joyport keypad entries are identical.
+
+Both emulators therefore consume the same host keys and route them to the
+same-labelled machine keys. `keymap.h` is built as the inverse of the C64
+positional map, which makes it equally the inverse of the VIC-20 one.
+
+Two caveats:
+
+- This was established by comparing the shipped keymap files, not by a hardware
+  session on `xvic`. The mapping is confirmed; end-to-end behaviour is not.
+- **The VIC-20 has only one control port.** Point the cartridge's port-2 mapping
+  (the keypad digits, via the Numpad device) at it; the port-1 keyset has nothing
+  to connect to.
 
 ## Software
 `Software/`

@@ -70,10 +70,15 @@ The keymap
 - `0xE0..0xE7`— modifier (Left Ctrl … Right GUI), OR-ed into the modifier byte
 
 The defaults are the **inverse of VICE's stock C64 positional keymap**
-(`gtk3_pos.vkm`). Because the cartridge sends *raw physical key positions plus
-the raw SHIFT/CTRL/C= state*, use VICE's **Positional** keymap (not Symbolic) so
-the C64 characters are reproduced correctly. Non-obvious defaults that match
-VICE positional:
+(`gtk3_pos.vkm`), and that inversion is the whole design of this table: a HID
+usage is itself a *position* (`0x04` means "the key where a US keyboard has A",
+not the letter A), so each entry answers "which PC key sits where this C64 key
+sits?" — never "which character does this key type?". VICE's **Positional**
+keymap then maps those PC positions back onto C64 matrix positions and the
+round trip closes. Symbolic breaks it by translating to characters through a PC
+layout; see the top-level README's [VICE Setup](../../README.md#vice-setup).
+
+Non-obvious defaults that match VICE positional:
 
     C64 CTRL  -> HID Tab          C64 C=        -> HID Left Ctrl (modifier)
     C64 R/S   -> HID Escape       C64 CLR/HOME  -> HID Home
