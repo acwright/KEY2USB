@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>KEY2USB Kit — Assembly &amp; Quick Start</title>
+<style>
+  @page { size: letter portrait; margin: 0.36in; }
+
+  :root {
+    --ink: #14161a;
+    --muted: #5b6068;
+    --rule: #c8ccd2;
+    --accent: #2b4c8c;
+    --panel: #eef1f5;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    color: var(--ink);
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 8pt;
+    line-height: 1.25;
+  }
+
+  .sheet {
+    width: 7.7in;
+    margin: 0 auto;
+  }
+
+  /* ---------- header ---------- */
+  header {
+    border-bottom: 2.5pt solid var(--ink);
+    padding-bottom: 3pt;
+    margin-bottom: 6pt;
+  }
+  h1 {
+    font-size: 24pt;
+    letter-spacing: 0.06em;
+    margin: 0;
+    font-weight: 800;
+  }
+  h1 .kit {
+    font-size: 10pt;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    color: var(--muted);
+    margin-left: 6pt;
+  }
+  .tag {
+    font-size: 9pt;
+    color: var(--muted);
+    line-height: 1.25;
+    margin-top: 1.5pt;
+  }
+  .thanks {
+    margin: 5pt 0 0;
+    font-size: 8.8pt;
+    line-height: 1.38;
+  }
+  .thanks strong { color: var(--accent); }
+
+  /* ---------- columns ---------- */
+  .cols {
+    display: flex;
+    gap: 0.28in;
+  }
+  .col { flex: 1 1 0; min-width: 0; }
+
+  h2 {
+    font-size: 8.3pt;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin: 0 0 3.5pt;
+    padding-bottom: 1.5pt;
+    border-bottom: 0.75pt solid var(--rule);
+    color: var(--accent);
+  }
+  section { margin-bottom: 5pt; }
+  p { margin: 0 0 3pt; }
+
+  ol, ul { margin: 0 0 3pt; padding-left: 12pt; }
+  li { margin-bottom: 1.6pt; }
+
+  .kbd {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 7.2pt;
+    background: var(--panel);
+    border: 0.5pt solid var(--rule);
+    border-radius: 2pt;
+    padding: 0 2pt;
+    white-space: nowrap;
+  }
+
+  /* ---------- full-width banner ---------- */
+  .banner {
+    display: flex;
+    align-items: center;
+    gap: 9pt;
+    border: 1.25pt solid var(--ink);
+    border-left: 5pt solid var(--ink);
+    background: var(--panel);
+    padding: 5pt 8pt;
+    margin-bottom: 6pt;
+  }
+  .banner .hd {
+    flex: 0 0 auto;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 9pt;
+    line-height: 1.2;
+    padding-right: 9pt;
+    border-right: 0.75pt solid var(--rule);
+  }
+  .banner p { margin: 0; flex: 1 1 auto; }
+
+  /* ---------- tables ---------- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 7.7pt;
+    margin-bottom: 3.5pt;
+  }
+  th, td {
+    text-align: left;
+    padding: 1.6pt 4pt 1.6pt 0;
+    border-bottom: 0.5pt solid var(--rule);
+    vertical-align: top;
+  }
+  th {
+    font-size: 6.9pt;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    font-weight: 700;
+  }
+  td.k { white-space: nowrap; font-weight: 600; }
+  td.q { width: 16pt; color: var(--muted); }
+
+  .note { color: var(--muted); font-size: 7.3pt; line-height: 1.3; }
+
+  /* ---------- footer ---------- */
+  footer {
+    margin-top: 2pt;
+    padding-top: 4pt;
+    border-top: 1.25pt solid var(--ink);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 12pt;
+    font-size: 7.5pt;
+    color: var(--muted);
+  }
+  footer .links { flex: 1 1 auto; line-height: 1.45; }
+  footer a { color: var(--accent); text-decoration: none; }
+  footer .sig { flex: 0 0 auto; text-align: right; line-height: 1.45; }
+  footer .sig strong { color: var(--ink); font-size: 8.4pt; }
+
+  @media print { a { color: var(--accent); } }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header>
+    <h1>KEY2USB<span class="kit">KIT</span></h1>
+    <div class="tag">
+      Use your Commodore 64's own keyboard as a USB keyboard for VICE — no soldering into the
+      machine, no case modification.
+    </div>
+    <p class="thanks">
+      <strong>Thank you for your order!</strong> Everything you need is in this box: the PCB, all
+      components, and a 3D-printed case. <strong>The two programmed chips — the 28C64 EEPROM (U1) and
+      the ATmega328 (U5) — arrive pre-programmed and ready to run</strong>, so there is nothing to
+      flash. All you need to supply is a soldering iron, solder, and side cutters. If anything is
+      missing or damaged, email me and I'll make it right.
+    </p>
+  </header>
+
+  <div class="banner">
+    <div class="hd">⚠ Set VICE to<br>Positional</div>
+    <p>
+      <strong>Settings → Keyboard → Keyboard Mapping → Positional</strong> — not Symbolic. This is
+      the single most common first-time mistake; if your keys come out wrong, check it before
+      anything else. KEY2USB reports keys by <em>physical position</em>, never as characters.
+      Symbolic layers an unwanted PC-layout translation on top of that and garbles shifted keys —
+      SHIFT&nbsp;+&nbsp;2 arrives as <span class="kbd">@</span> instead of
+      <span class="kbd">"</span>.
+    </p>
+  </div>
+
+  <div class="cols">
+
+    <!-- ================= LEFT ================= -->
+    <div class="col">
+
+      <section>
+        <h2>What's in the Kit</h2>
+        <table>
+          <tr><th>Qty</th><th>Ref</th><th>Part</th></tr>
+          <tr><td class="q">1</td><td class="k">—</td><td>KEY2USB PCB + 3D-printed case</td></tr>
+          <tr><td class="q">1</td><td class="k">U1</td><td>28C64 EEPROM + socket — <strong>pre-programmed</strong></td></tr>
+          <tr><td class="q">1</td><td class="k">U5</td><td>ATmega328 MCU + socket — <strong>pre-programmed</strong></td></tr>
+          <tr><td class="q">3</td><td class="k">U2–U4</td><td>74LS32 (DIP-14), 74LS273 (DIP-20), 74LS74 (DIP-14) glue logic</td></tr>
+          <tr><td class="q">3</td><td class="k">Y1, C5, C6</td><td>16 MHz crystal + 2× 20pF load caps</td></tr>
+          <tr><td class="q">4</td><td class="k">C1–C4</td><td>100nF ceramic — IC bypass</td></tr>
+          <tr><td class="q">2</td><td class="k">D1, D2</td><td>1N5227B 3.6V Zener — <em>polarized</em></td></tr>
+          <tr><td class="q">3</td><td class="k">R1–R3</td><td>2× 68Ω USB series, 1× 1.5kΩ D− pull-up</td></tr>
+          <tr><td class="q">2</td><td class="k">J1, J3</td><td>3-pin MODE header + jumper cap, USB Type B connector</td></tr>
+        </table>
+      </section>
+
+      <section>
+        <h2>Assembly</h2>
+        <p>
+          All through-hole. Build shortest-to-tallest so parts sit flat. The two programmed chips get
+          <strong>sockets</strong>; the three 74LS logic ICs solder <strong>directly</strong> down.
+        </p>
+        <ol>
+          <li>Resistors <span class="kbd">R1–R3</span>, then ceramic capacitors
+              <span class="kbd">C1–C6</span> — neither is polarized.</li>
+          <li>Zener diodes <span class="kbd">D1 D2</span> — <strong>polarized.</strong> The band on
+              the body must match the banded end of the silkscreen outline.</li>
+          <li>The two DIP-28 sockets at <span class="kbd">U1</span> and <span class="kbd">U5</span>,
+              notch matching the silkscreen. Leave them empty for now.</li>
+          <li><span class="kbd">U2 U3 U4</span> soldered straight down — <strong>check each notch
+              against the silkscreen first</strong>; these are not socketed and are unpleasant to
+              remove.</li>
+          <li>Crystal <span class="kbd">Y1</span>, MODE header <span class="kbd">J1</span>, then the
+              USB Type B connector <span class="kbd">J3</span> — seat J3 fully flat; it takes the
+              mechanical stress of the cable.</li>
+          <li>Trim all leads flush, then inspect for solder bridges — especially along the edge
+              fingers and between adjacent IC pins.</li>
+          <li>Press the labeled <span class="kbd">U1</span> and <span class="kbd">U5</span> chips
+              into their sockets last, notch matching, with no bent-under pins.</li>
+        </ol>
+        <p class="note">
+          <strong>Before closing the case:</strong> fit the jumper cap on <span class="kbd">J1</span>
+          in the <strong>C64</strong> position (the GND side, marked on the silkscreen) — the
+          supported setting, and covers every machine listed below. (The board's other firmware bank
+          holds an unsupported C128 native-mode build, kept for the curious.)
+        </p>
+      </section>
+
+      <section>
+        <h2>Compatibility</h2>
+        <table>
+          <tr><td class="k">Commodore 64 / 64C</td><td>Yes — primary target</td></tr>
+          <tr><td class="k">Commodore 128 / 128D</td><td>Yes — boots straight into C64 mode</td></tr>
+          <tr><td class="k">Ultimate 64</td><td>Yes — verified on hardware</td></tr>
+        </table>
+        <p class="note">
+          On a C128 the cartridge asserts <span class="kbd">/EXROM</span>, so it comes up in C64 mode
+          on its own; if one does not autostart, power on holding <span class="kbd">C=</span>. Its
+          extra keys (keypad, ESC, TAB, ALT, HELP, cursor pad) sit outside the standard 8×8 matrix
+          and are not reported; every key it shares with the C64 works.
+        </p>
+      </section>
+
+    </div>
+
+    <!-- ================= RIGHT ================= -->
+    <div class="col">
+
+      <section>
+        <h2>First Power-On</h2>
+        <ol>
+          <li>With the C64 <strong>powered off</strong>, insert KEY2USB into the expansion port.</li>
+          <li>Connect the USB cable to your PC. It enumerates as a standard HID keyboard — no drivers
+              needed.</li>
+          <li>Power on the C64. The <span class="kbd">KEY2USB</span> splash screen appears; the
+              cartridge has taken over the machine and is scanning the keyboard.</li>
+          <li>In VICE, set <strong>Settings → Keyboard → Keyboard Mapping → Positional</strong>.
+              This step is mandatory.</li>
+          <li>Type on the C64. Keystrokes arrive at the PC.</li>
+        </ol>
+        <p class="note">
+          While KEY2USB is running the C64 is dedicated to being a keyboard and does not return to
+          BASIC. Power off and remove the cartridge to use the machine normally.
+        </p>
+      </section>
+
+      <section>
+        <h2>Joysticks in VICE</h2>
+        <p>
+          Both joystick ports are scanned and arrive at the host as ordinary keypad keystrokes, so
+          VICE must be told which keys mean "joystick."
+        </p>
+        <p>
+          <strong>Port 2</strong> — no configuration needed beyond
+          <strong>Settings → Joystick → Joystick Port #2 → Numpad</strong>. VICE's built-in Numpad
+          device already matches the cartridge's port-2 mapping exactly.
+        </p>
+        <p>
+          <strong>Port 1</strong> — needs a keyset, since Numpad can only serve one port. Set
+          <strong>Joystick Port #1 → Keyset A</strong>, then <strong>Configure Keyset A</strong>:
+        </p>
+        <table>
+          <tr><th>Direction</th><th>Key</th></tr>
+          <tr><td class="k">North</td><td>Keypad <strong>&minus;</strong></td></tr>
+          <tr><td class="k">South</td><td>Keypad <strong>+</strong></td></tr>
+          <tr><td class="k">West</td><td>Keypad <strong>/</strong></td></tr>
+          <tr><td class="k">East</td><td>Keypad <strong>&ast;</strong></td></tr>
+          <tr><td class="k">Fire</td><td>Keypad <strong>enter</strong></td></tr>
+        </table>
+        <p class="note">
+          <strong>Worth knowing:</strong> a held joystick direction grounds a line in the keyboard
+          matrix, so it phantom-presses real keys — exactly as on a bare C64. Port 1 is hit hardest,
+          grounding a whole matrix row (RETURN, INST/DEL, CLR/HOME), so expect stray keystrokes while
+          a port-1 direction is held. <strong>Port 2 is the one to use.</strong>
+        </p>
+      </section>
+
+      <section>
+        <h2>Troubleshooting</h2>
+        <table>
+          <tr><th>Symptom</th><th>Check</th></tr>
+          <tr>
+            <td class="k">Wrong characters</td>
+            <td>VICE keyboard mapping is set to <strong>Positional</strong>, not Symbolic.</td>
+          </tr>
+          <tr>
+            <td class="k">No splash screen</td>
+            <td>Cartridge fully seated, C64 powered off when inserted. Then re-check IC orientation
+                and bridged joints near U1 and the edge fingers.</td>
+          </tr>
+          <tr>
+            <td class="k">No USB device</td>
+            <td>The C64 must be powered on — the cartridge is bus-powered. Then check Y1 and its 20pF
+                caps, R1–R3, and the D1/D2 band orientation.</td>
+          </tr>
+          <tr>
+            <td class="k">Joystick does nothing</td>
+            <td>Port 2 set to <strong>Numpad</strong>; port 1 set to <strong>Keyset A</strong> and
+                configured as above.</td>
+          </tr>
+        </table>
+        <p class="note">
+          <span class="kbd">Software/key2usbtest.prg</span> in the repository shows live joystick
+          state and the last keys received — the quickest way to check a finished build.
+        </p>
+      </section>
+
+    </div>
+  </div>
+
+  <footer>
+    <div class="links">
+      <strong>Schematic, firmware source &amp; full documentation:</strong>
+      <a href="https://github.com/acwright/KEY2USB">github.com/acwright/KEY2USB</a><br>
+      <strong>Store:</strong> <a href="https://www.tindie.com/stores/acwrightdesign/">tindie.com/stores/acwrightdesign</a>
+      &nbsp;·&nbsp; <strong>Support:</strong> acwrightdesign@gmail.com<br>
+      Hardware released under the CERN Open Hardware Licence v2 — Permissive.
+    </div>
+    <div class="sig">
+      Stuck on a build? Please reach out<br>
+      before leaving a review — I'm happy to help.<br>
+      <strong>— Aaron Wright</strong>
+    </div>
+  </footer>
+
+</div>
+</body>
+</html>
