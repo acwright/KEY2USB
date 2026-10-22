@@ -31,15 +31,20 @@ VERSION_MINOR = 3
 VERSION_PATCH = 0
 
 ; ---------------------------------------------------------------------------
-; Build option SCAN_EXTENDED (C128 bank only): scan the C128's extra keys -
+; SCAN_EXTENDED (C128 bank only, on by default): scan the C128's extra keys -
 ; numeric keypad, ESC, TAB, ALT, HELP, LINE FEED, NO SCROLL, cursor pad (via
-; $D02F) and the CAPS LOCK / 40/80 DISPLAY latches. EXPERIMENTAL; build it
-; with `make EXTENDED=1`.
+; $D02F) and the CAPS LOCK / 40/80 DISPLAY latches. `make EXTENDED=0` builds
+; the C128 bank without it (assembler: --asm-define NO_SCAN_EXTENDED).
 ;
-; An early (v1.0-era) attempt made a real C128's keyboard erratic. That build
-; also had the emit_event Y bug and single, unsettled row reads, both fixed
-; since; whether either was the cause is what this experiment establishes.
+; A v1.0-era attempt made a real C128's keyboard erratic. That build also had
+; the emit_event Y bug and single, unsettled row reads; with both fixed, the
+; scan passed a full 89-key sweep and an idle soak on a real C128 (v1.3.0).
 ; ---------------------------------------------------------------------------
+.ifdef TARGET_C128
+.ifndef NO_SCAN_EXTENDED
+SCAN_EXTENDED = 1
+.endif
+.endif
 
 .ifdef TARGET_C128
 BANNER_MODE_LEN = 9

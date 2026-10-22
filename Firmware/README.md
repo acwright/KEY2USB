@@ -21,10 +21,13 @@ Event byte (`$DE00` → latch → ATmega):
 
     bit 7      1 = pressed (make), 0 = released (break)
     bits 6..0  keyID   0..63    C64 matrix, col*8+row
-                       64..87   C128 extended keys (optional scan)
+                       64..87   C128 extended keys (C128 bank)
+                       88, 89   C128 CAPS LOCK, 40/80 DISPLAY latches (C128 bank)
                        112..116 joystick port 2 (up/down/left/right/fire)
                        120..124 joystick port 1 (up/down/left/right/fire)
                        126      RESTORE (a ~100 ms make/break tap per press)
+                       125      SYNC128, always $7D: SYNC from the C128 bank;
+                                also selects the ATmega's C128 mappings
                        127      SYNC, always $7F: nothing is held, release all
 
 SYNC is sent at power-up/reset and about once a second while nothing is held,
@@ -59,6 +62,16 @@ Version history
 Both firmwares share a version number. The cartridge shows it on its splash
 screen; the controller reports it as the USB `bcdDevice` (`1.20` = v1.2.0,
 visible in `Software/key2usbmon`).
+
+**v1.3.0** — both chips.
+- Full C128 keyboard in native C128 mode (jumper = C128): the C128 bank now
+  scans the numeric keypad, ESC, TAB, ALT, HELP, LINE FEED, NO SCROLL, the
+  cursor pad and the CAPS LOCK / 40/80 DISPLAY latches, and announces itself
+  with SYNC128 so the controller uses `x128`'s host keys (function keys, cursor
+  keys and the extra keys all sit elsewhere in `x128`). C64 mode is unchanged.
+- `make EXTENDED=0` builds the C128 bank without the extra-key scan.
+- `key2usbmon --c128` names keys as the C128 bank sends them; with `--check` it
+  covers all 89.
 
 **v1.2.1** — cartridge EEPROM only; the controller is unchanged and still
 reports `1.20`.

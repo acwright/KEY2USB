@@ -69,7 +69,7 @@ to obdev's *serial-number* set, whose rules let a device omit the serial number
 when it relies only on the operating system's default class driver — true for
 a HID keyboard. See V-USB's `USB-IDs-for-free.txt`.
 
-`bcdDevice` carries the firmware version (`1.20` = v1.2.0).
+`bcdDevice` carries the firmware version (`1.30` = v1.3.0).
 
 Reliability
 -----------
@@ -123,9 +123,38 @@ Non-obvious defaults that match VICE positional:
 
     C64 RESTORE -> HID Page Up    (VICE positional's RESTORE key; keyID 126)
 
-Edit the table freely for other hosts/emulators. keyIDs 64–87 (C128 extended
-keys) are unmapped by default — see the Cart README to enable that scan.
-keyID 127 is SYNC and is handled before the table is consulted.
+Edit the table freely for other hosts/emulators. keyIDs 125 and 127 are the
+SYNC events and are handled before any table is consulted.
+
+### C128 mode
+
+When the cartridge's C128 bank is running (mode jumper on C128), it sends
+**SYNC128** (`0x7D`) instead of SYNC, and the controller switches to `x128`'s host
+keys until it next sees a plain SYNC. `keymap128` in `keymap.h` lists the
+overrides: the inverse of VICE's `x128` positional keymap (`C128/gtk3_pos.vkm`).
+
+| C128 key | Host key | | C128 key | Host key |
+|----------|----------|-|----------|----------|
+| F1 / F3 / F5 / F7 | F1 / F2 / F3 / F4 | | ESC | F9 |
+| HELP | F5 | | TAB | F10 |
+| LINE FEED | F6 | | ALT | F11 |
+| 40/80 DISPLAY | F7 (tap) | | CAPS LOCK | F12 (tap) |
+| NO SCROLL | F8 | | Keypad, cursor pad | Keypad, arrows |
+
+`main.c` handles two cases a table cannot:
+
+- **CRSR L/R, CRSR U/D.** `x128` gives these no host key in native mode; the host
+  arrows drive the separate cursor pad, and SHIFT does not reverse the pad (the
+  KERNAL's decode tables at `$FA80` give shifted → as → again). So they are sent
+  as Right/Down, or Left/Up when a SHIFT is held at the moment of the press. The
+  release always matches whatever was pressed.
+- **CAPS LOCK, 40/80 DISPLAY.** These latch mechanically, but `x128` toggles them
+  on each host key press. Every movement of the latch is sent as one tap (pressed
+  for two reports, then released).
+
+In C128 mode the joystick ports keep their C64-mode keys, which are keypad keys,
+so they share host keys with the C128 keypad. That is unavoidable when `x128`
+uses the whole keypad for the C128 keypad.
 
 Joysticks
 ---------

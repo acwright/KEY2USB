@@ -7,9 +7,9 @@
 #   make view       -> build, then hexdump the image
 #   make clean      -> remove all build output
 #
-#   make EXTENDED=1 -> also scan the C128's extra keys in the C128 bank
+#   make EXTENDED=0 -> build the C128 bank WITHOUT its extra-key scan
 #                      (keypad, ESC, TAB, ALT, HELP, LINE FEED, NO SCROLL,
-#                      cursor pad, CAPS LOCK, 40/80). EXPERIMENTAL.
+#                      cursor pad, CAPS LOCK, 40/80), which is on by default.
 #
 # `make` always rebuilds and leaves only Cart.bin (the two intermediate 4K bank
 # files are deleted once concatenated).
@@ -25,8 +25,8 @@ EEPROM = AT28C64B
 
 CL65 = cl65 -t none -C $(CONFIG)
 
-ifeq ($(EXTENDED),1)
-C128_DEFS = --asm-define SCAN_EXTENDED
+ifeq ($(EXTENDED),0)
+C128_DEFS = --asm-define NO_SCAN_EXTENDED
 endif
 
 .PHONY: all build eeprom view clean

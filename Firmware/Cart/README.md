@@ -48,10 +48,12 @@ Written to `$DE00`:
 | keyID     | Source |
 |-----------|--------|
 | `0..63`   | C64 matrix, `col*8 + row` (the classic KERNAL "keyboard code") |
-| `64..87`  | C128 extended keys (optional scan, off by default) |
+| `64..87`  | C128 extended keys, `64 + kcol*8 + row` (C128 bank) |
+| `88`, `89`| C128 CAPS LOCK, 40/80 DISPLAY latches (C128 bank) |
 | `112..116`| Joystick **port 2** — up, down, left, right, fire |
 | `120..124`| Joystick **port 1** — up, down, left, right, fire |
 | `126`     | RESTORE — each press is a ~100 ms make/break tap |
+| `125`     | SYNC128 (always `$7D`) — SYNC from the C128 bank; also selects the ATmega's C128 mappings |
 | `127`     | SYNC (always break form, `$7F`) — "nothing is held" |
 
 The 6502 side reports switch positions only; the ATmega owns the keyID → USB
@@ -103,12 +105,30 @@ In practice this only matters if you type while holding a direction.
 
 C128 extended keys
 ------------------
-The C128's extra keys (numeric keypad / ESC / TAB / ALT / HELP / cursor pad) are
-read via `$D02F` as keyIDs `64 + kcol*8 + row`. This scan is experimental and
-gated behind a `.define SCAN_EXTENDED` build flag in `Cart.asm`; it is **not**
-compiled in by default. With it off, the C128 bank scans the standard 8×8 matrix
-(the full C64-compatible key subset). To enable it, define the flag and add the
-corresponding keyID 64+ entries to `Controller/src/keymap.h`.
+The C128 bank scans the C128's extra keys as well (on by default; `make
+EXTENDED=0` builds it without). The three extra columns K0..K2 are selected
+through `$D02F` while the normal columns are idle, and read on `$DC01`; keyIDs
+are `64 + kcol*8 + row`:
+
+| Column | row 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|--------|-------|---|---|---|---|---|---|---|
+| K0 (64–71) | HELP | KP 8 | KP 5 | TAB | KP 2 | KP 4 | KP 7 | KP 1 |
+| K1 (72–79) | ESC | KP + | KP − | LINE FEED | ENTER | KP 6 | KP 9 | KP 3 |
+| K2 (80–87) | ALT | KP 0 | KP . | ↑ | ↓ | ← | → | NO SCROLL |
+
+The C128 KERNAL's decode tables (`$FA80`) and VICE's `x128` keymap agree on this
+layout. CAPS LOCK (8502 port `$01` bit 6) and 40/80 DISPLAY (MMU `$D505` bit 7)
+are latching keys outside the matrix; both read 0 while latched down and are
+reported as keyIDs 88 and 89, make = latched.
+
+The C128 bank sends **SYNC128** (`$7D`) instead of SYNC, which tells the ATmega to
+use its C128 mappings (`x128`'s host keys); see the Controller README. Held
+extended keys suppress SYNC like any other key; the CAPS LOCK / 40/80 latches do
+not, since the ATmega sends those as taps and never holds them.
+
+A v1.0-era version of this scan made a real C128's keyboard erratic. That build
+also had the `emit_event` `Y` bug and single, unsettled row reads. With both
+fixed, v1.3.0 passed a full 89-key sweep and an idle soak on a real C128.
 
 Notes
 -----

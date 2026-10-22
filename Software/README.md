@@ -66,6 +66,16 @@ it has been seen pressed **and** released, finishing with
 `ALL 65 KEYS PASS`. Add `--joy` to require the ten joystick contacts as well.
 A quick per-unit test before a cartridge ships.
 
+### C128 mode (`--c128`)
+
+With the cartridge's mode jumper on C128, the controller sends `x128`'s host keys
+(see the top-level README). Add `--c128` so key2usbmon names keys accordingly:
+the keypad as the C128 keypad, F5 as HELP, F9 as ESC and so on.
+`--c128 --check` covers all 89 keys: the 64 matrix keys, RESTORE, the 22 extra
+keys and the CAPS LOCK / 40/80 latches. In native mode the main CRSR keys share
+host keys with the cursor pad's → and ↓, so each of those two lines is ticked by
+either key.
+
 The key names come from a copy of `Firmware/Controller/src/keymap.h` kept in
 `key2usbmon.swift`; if you retarget the keymap, update that table too (unknown
 usages still show as `HID 0xNN`).

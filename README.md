@@ -22,6 +22,7 @@ A non-invasive **Commodore 64** expansion port cartridge that lets the machine's
   - [Joysticks](#joysticks)
   - [RESTORE](#restore)
   - [Verifying your setup](#verifying-your-setup)
+  - [x128 (C128 native mode)](#x128-c128-native-mode)
   - [VIC-20 (xvic)](#vic-20-xvic)
 - [Software](#software)
 - [CAD](#cad)
@@ -51,10 +52,13 @@ Nothing inside the machine is touched. The cartridge takes over the C64 on power
 
 On a **C128**, the cartridge asserts `/EXROM`, which the C128 detects at reset and
 uses to boot straight into C64 mode — so KEY2USB comes up on its own with no key
-combination needed. The full C128 keyboard is *not* scanned: the extra keys
-(numeric keypad, ESC, TAB, ALT, HELP, and the separate cursor pad) sit outside the
-standard 8×8 matrix and are not reported. Every key the C128 shares with the C64
-works normally.
+combination needed. Every key the C128 shares with the C64 works normally; the
+C128's extra keys (numeric keypad, ESC, TAB, ALT, HELP, LINE FEED, NO SCROLL, the
+separate cursor pad, CAPS LOCK and 40/80 DISPLAY) are not reported in C64 mode.
+
+For the **full C128 keyboard** in VICE's `x128`, move the [mode jumper](#mode-jumper)
+to C128: the cartridge then runs in native C128 mode and reports all 91 keys. See
+[x128](#x128-c128-native-mode).
 
 If a particular C128 does not autostart, power on while holding the **C=** key to
 force C64 mode.
@@ -97,11 +101,11 @@ The board carries a 3-pin `MODE` header (J1) that selects the EEPROM bank and th
 it.** The C64 bank is the supported configuration; it covers the C64, C64C, Ultimate 64, 
 and the C128 by way of C64 mode. There is no need to change it, and the case has no opening for it.
 
-The C128 bank is retained for developers and the curious. It is stable for the
-standard 8×8 matrix — the same key coverage the C64 bank provides — but it offers
-no advantage over C64 mode, since scanning of the C128-only extended keys is
-incomplete and disabled. Changing the jumper means opening the case, and is
-entirely at your own discretion.
+The C128 bank is for C128 owners who want the **whole C128 keyboard** in `x128`:
+the 8×8 matrix plus the numeric keypad, ESC, TAB, ALT, HELP, LINE FEED, NO SCROLL,
+the cursor pad, CAPS LOCK and 40/80 DISPLAY. It is verified on a real C128 (every
+key, in `x128` too). It has no use on a C64. Changing the jumper means opening the
+case, and is entirely at your own discretion.
 
 ## Hardware
 
@@ -145,9 +149,9 @@ flash, and layout details). Set VICE's keyboard mapping to **Positional** — se
   can release anything it still believes is down.
 
 The upper bank holds the C128 native-mode firmware, which autostarts from a
-`CBM` / `$01` external function ROM header and scans the same 8×8 matrix. Extended-key
-scanning via `$D02F` is present in the source but gated behind a build flag and not
-compiled in — it is unverified on hardware. See `Firmware/Cart/README.md`.
+`CBM` / `$01` external function ROM header. It scans the 8×8 matrix, the three extra
+key columns via `$D02F`, and the CAPS LOCK and 40/80 DISPLAY latches, and tells the
+ATmega to use `x128`'s host keys. See `Firmware/Cart/README.md`.
 
 **ATmega328/328P side:**
 - Poll `RDY`; on set, read the key byte from `PINC`/`PINB`, pulse `/CLRRDY`.
@@ -246,6 +250,37 @@ last keys received, so you can confirm the cartridge and your VICE
 configuration in one place. On a Mac, `Software/key2usbmon` checks the
 cartridge itself with VICE out of the picture: it reads the raw USB reports and
 names the C64 key behind each one. See [Software/](Software/).
+
+### `x128` (C128 native mode)
+
+With the [mode jumper](#mode-jumper) on **C128**, the cartridge runs in native C128
+mode and the ATmega switches to the host keys VICE's `x128` positional keymap
+expects. Use **Settings → Keyboard → Keyboard Mapping → Positional** here too.
+
+| C128 key | Host key | | C128 key | Host key |
+|----------|----------|-|----------|----------|
+| F1 / F3 / F5 / F7 | F1 / F2 / F3 / F4 | | ESC | F9 |
+| HELP | F5 | | TAB | F10 |
+| LINE FEED | F6 | | ALT | F11 |
+| 40/80 DISPLAY | F7 (tap) | | CAPS LOCK | F12 (tap) |
+| NO SCROLL | F8 | | Numeric keypad | Keypad |
+| Cursor pad | Arrow keys | | RESTORE | Page Up |
+
+Three things behave differently from C64 mode:
+
+- **The keypad is the C128 keypad.** VICE's Numpad joystick device claims the same
+  host keys, so set **Joystick Port #2 → None** (or a keyset off the keypad) while
+  typing on the keypad, or the keys move the joystick instead of typing.
+- **CRSR keys.** In native mode `x128` drives only the separate cursor pad from the
+  host arrows, and SHIFT does not reverse it. The cartridge therefore sends the
+  main CRSR keys as Right/Down, or Left/Up while SHIFT is held, so they move the
+  cursor exactly as on the real machine.
+- **CAPS LOCK and 40/80 DISPLAY latch mechanically**, while `x128` toggles them on
+  each host key press. Each movement of the latch is sent as one tap, so `x128`
+  follows the real key. If they ever disagree, toggle the key twice. 40/80 only
+  takes effect at reset, as on the real machine.
+
+`Software/key2usbmon --c128 --check` checks all 89 keys from the host side.
 
 ### VIC-20 (`xvic`)
 
