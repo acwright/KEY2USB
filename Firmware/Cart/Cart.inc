@@ -61,6 +61,12 @@ KEY_RESTORE = 126
 ; the host. An ATmega without SYNC support sees an unmapped key and ignores it.
 EV_SYNC   = $7F
 
+; SYNC128 (keyID 125, break form): SYNC from the C128 bank. Same "nothing is
+; held" meaning, and it also tells the ATmega to use its C128 mappings (x128
+; puts the function keys, cursor keys and the extended keys on different host
+; keys than x64 does). The C64 bank's plain SYNC switches it back.
+EV_SYNC128 = $7D
+
 ; ---- Joysticks ---------------------------------------------------------------
 ; Both ports share CIA#1 with the keyboard: port 2 sits on port A (the COLUMN
 ; drive), port 1 on port B (the ROW read). Contacts are active low.
@@ -89,6 +95,14 @@ JOY1_BASE = 120         ; port 1 -> 120..124
 ; Extended keyIDs are numbered 64 + kcol*8 + row.
 VIC_KBD   = $D02F
 EXT_BASE  = 64
+
+; CAPS LOCK (ASCII/DIN) and 40/80 DISPLAY are latching keys outside the matrix.
+; Both read 0 while latched down (the KERNAL tests them the same way: $C55D,
+; $C139). They are reported as ordinary keys: make = latched, break = released.
+LOCK_BASE = 88          ; bit 0 -> 88 CAPS LOCK, bit 1 -> 89 40/80 DISPLAY
+CAPS_BIT  = $40         ; 8502 port $01 bit 6
+MMU_MCR   = $D505       ; MMU mode configuration register
+D4080_BIT = $80         ; $D505 bit 7
 
 ; ---- C128 MMU ----------------------------------------------------------------
 ; The KERNAL starts a function ROM with $FF00 = $2A, which maps $C000-$FFFF to

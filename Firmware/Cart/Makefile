@@ -7,6 +7,10 @@
 #   make view       -> build, then hexdump the image
 #   make clean      -> remove all build output
 #
+#   make EXTENDED=1 -> also scan the C128's extra keys in the C128 bank
+#                      (keypad, ESC, TAB, ALT, HELP, LINE FEED, NO SCROLL,
+#                      cursor pad, CAPS LOCK, 40/80). EXPERIMENTAL.
+#
 # `make` always rebuilds and leaves only Cart.bin (the two intermediate 4K bank
 # files are deleted once concatenated).
 
@@ -21,6 +25,10 @@ EEPROM = AT28C64B
 
 CL65 = cl65 -t none -C $(CONFIG)
 
+ifeq ($(EXTENDED),1)
+C128_DEFS = --asm-define SCAN_EXTENDED
+endif
+
 .PHONY: all build eeprom view clean
 
 all: build
@@ -29,7 +37,7 @@ all: build
 # 8K image, then delete the intermediate bank files.
 build: $(SRC)
 	$(CL65) -o cart_c64.bin Cart.asm
-	$(CL65) --asm-define TARGET_C128 -o cart_c128.bin Cart.asm
+	$(CL65) --asm-define TARGET_C128 $(C128_DEFS) -o cart_c128.bin Cart.asm
 	cat cart_c64.bin cart_c128.bin > $(TARGET).bin
 	@rm -f cart_c64.bin cart_c128.bin
 	@printf 'Built %s (%s bytes)\n' "$(TARGET).bin" "$$(wc -c < $(TARGET).bin | tr -d ' ')"

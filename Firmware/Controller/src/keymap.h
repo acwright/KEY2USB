@@ -45,18 +45,23 @@
 #define HID_PGUP      0x4B
 #define HID_PGDN      0x4E
 #define HID_RIGHT     0x4F
+#define HID_LEFT      0x50
 #define HID_END       0x4D
 #define HID_DOWN      0x51
+#define HID_UP        0x52
+#define HID_F(n)      (0x3A + (n) - 1)  /* F1..F12 = 0x3A..0x45 */
 #define HID_LCTRL     0xE0
 #define HID_LSHIFT    0xE1
 #define HID_RSHIFT    0xE5
 
 /* Numeric keypad (note: on some hosts these depend on NumLock being on). */
-#define HID_KP_0      0x62
-#define HID_KP_2      0x5A
-#define HID_KP_4      0x5C
-#define HID_KP_6      0x5E
-#define HID_KP_8      0x60
+#define HID_KP(n)     ((n) ? 0x59 + (n) - 1 : 0x62)  /* KP 1..9, KP 0 */
+#define HID_KP_0      HID_KP(0)
+#define HID_KP_2      HID_KP(2)
+#define HID_KP_4      HID_KP(4)
+#define HID_KP_6      HID_KP(6)
+#define HID_KP_8      HID_KP(8)
+#define HID_KP_DOT    0x63
 /* Keypad symbols. VICE's built-in Numpad joystick device claims only KP 0-9
  * (digits = 8 directions + fire), so these never collide with it. */
 #define HID_KP_SLASH  0x54
@@ -65,8 +70,9 @@
 #define HID_KP_PLUS   0x57
 #define HID_KP_ENTER  0x58
 
-/* keyID (col*8+row) -> HID usage. 128 entries; 64..127 reserved for C128
- * extended keys, left unmapped until verified on real C128 hardware. */
+/* keyID (col*8+row) -> HID usage. 128 entries. The C128-only keyIDs
+ * (64..89) stay unmapped here: they are mapped in keymap128 below, and only
+ * the cartridge's C128 bank sends them. */
 static const uint8_t keymap[128] PROGMEM = {
     /*  0 INST/DEL   */ HID_BSPACE,
     /*  1 RETURN     */ HID_ENTER,
@@ -161,6 +167,64 @@ static const uint8_t keymap[128] PROGMEM = {
 
     [KEY_RESTORE] = HID_PGUP,      /* VICE positional: Page_Up -> RESTORE */
 };
+
+/* ---------------------------------------------------------------------------
+ *  C128 mode (the cartridge's C128 bank announces itself with SYNC128)
+ *
+ *  Overrides of keymap[] that apply only in C128 mode: the inverse of VICE's
+ *  stock x128 positional keymap (share/vice/C128/gtk3_pos.vkm). Everything
+ *  not listed here maps exactly as in keymap[] above.
+ *
+ *  Two C128 keys need more than a table entry; main.c handles them:
+ *    - CRSR L/R and CRSR U/D: x128 has no host key for these in native mode;
+ *      the host arrows drive the separate cursor pad instead, and SHIFT on the
+ *      pad does not reverse direction (KERNAL tables at $FA80). So they are
+ *      sent as host Right / Down, or Left / Up while a SHIFT is held.
+ *    - CAPS LOCK and 40/80 DISPLAY latch mechanically, while x128 toggles them
+ *      on each host key press. So each change of the latch is sent as a tap.
+ * ------------------------------------------------------------------------- */
+static const uint8_t keymap128[][2] PROGMEM = {
+    /* x128 moves the top-row function keys to host F1-F4 */
+    {  4, HID_F(1) },     /* F1 */
+    {  5, HID_F(2) },     /* F3 */
+    {  6, HID_F(3) },     /* F5 */
+    {  3, HID_F(4) },     /* F7 */
+    /* K0 */
+    { 64, HID_F(5) },     /* HELP */
+    { 65, HID_KP(8) },
+    { 66, HID_KP(5) },
+    { 67, HID_F(10) },    /* TAB */
+    { 68, HID_KP(2) },
+    { 69, HID_KP(4) },
+    { 70, HID_KP(7) },
+    { 71, HID_KP(1) },
+    /* K1 */
+    { 72, HID_F(9) },     /* ESC */
+    { 73, HID_KP_MINUS }, /* KP + : the key in the host KP - position */
+    { 74, HID_KP_PLUS },  /* KP - : the key in the host KP + position */
+    { 75, HID_F(6) },     /* LINE FEED */
+    { 76, HID_KP_ENTER },
+    { 77, HID_KP(6) },
+    { 78, HID_KP(9) },
+    { 79, HID_KP(3) },
+    /* K2 */
+    { 80, HID_F(11) },    /* ALT */
+    { 81, HID_KP(0) },
+    { 82, HID_KP_DOT },
+    { 83, HID_UP },       /* cursor pad */
+    { 84, HID_DOWN },
+    { 85, HID_LEFT },
+    { 86, HID_RIGHT },
+    { 87, HID_F(8) },     /* NO SCROLL */
+    /* latches outside the matrix, sent as taps */
+    { KEY_CAPS, HID_F(12) },   /* x128: "F12 -4 1" CAPS (ASCII/DIN) */
+    { KEY_4080, HID_F(7) },    /* x128: "F7 -4 0"  40/80 DISPLAY */
+};
+
+/* Note: in C128 mode the keypad and the joystick ports share host keys
+ * (port 2 = keypad digits, port 1 = KP - + / * ENTER), as they must: x128
+ * uses the whole keypad for the C128 keypad. Enable VICE's Numpad joystick or
+ * a keypad keyset only when not typing on the C128 keypad. */
 
 /* Why port 1 is on keypad symbols rather than function keys:
  * F12 never reached VICE as a key (verified on hardware 2026-07-19, F8-F11

@@ -59,6 +59,12 @@ static uint8_t reportSends;        /* times the current state still goes out  */
 static uint8_t idleRate;           /* HID idle rate, in 4 ms units (0 = off)  */
 static uint8_t protocol = 1;       /* HID protocol: 0 = boot, 1 = report      */
 
+static uint8_t c128;               /* 1 = the C128 bank sent SYNC128          */
+static uint8_t crsrSent[2];        /* C128: usage sent for CRSR L/R, U/D      */
+static uint8_t tapUsage;           /* C128: latch tap waiting to be released  */
+
+#define MOD_SHIFTS 0x22            /* LShift (bit 1) | RShift (bit 5)         */
+
 /* V-USB marks an interrupt report as sent the moment it transmits it, without
  * waiting for the host's ACK (see asmcommon.inc). A report the host failed to
  * receive is simply gone. A host that sets an idle rate gets the state again
@@ -102,7 +108,54 @@ static uint8_t releaseAll(void)
         held |= keys[i];
         keys[i] = 0;
     }
+    tapUsage = 0;
     return held != 0;
+}
+
+/* keyID -> HID usage for the current machine (C128 overrides first). */
+static uint8_t lookup(uint8_t keyID)
+{
+    if (c128) {
+        uint8_t i;
+        for (i = 0; i < sizeof(keymap128) / sizeof(keymap128[0]); i++)
+            if (pgm_read_byte(&keymap128[i][0]) == keyID)
+                return pgm_read_byte(&keymap128[i][1]);
+    }
+    return pgm_read_byte(&keymap[keyID]);
+}
+
+/* One make/break event. Returns 1 if the report changed. */
+static uint8_t keyEvent(uint8_t ev)
+{
+    uint8_t keyID = EV_KEYID(ev);
+    uint8_t usage = lookup(keyID);
+
+    if (usage == HID_NONE)
+        return 0;
+    if (c128) {
+        if (keyID == KEY_CAPS || keyID == KEY_4080) {
+            /* Latch moved either way: one press for x128 to toggle on.
+             * Released once the press has gone out (see main loop). */
+            if (tapUsage)
+                keyUp(tapUsage);
+            keyDown(usage);
+            tapUsage = usage;
+            return 1;
+        }
+        if (keyID == KEY_CRSR_LR || keyID == KEY_CRSR_UD) {
+            uint8_t ud = (keyID == KEY_CRSR_UD);
+            if (ev & EV_PRESSED) {
+                if (modifiers & MOD_SHIFTS)
+                    usage = ud ? HID_UP : HID_LEFT;
+                crsrSent[ud] = usage;
+            } else {
+                usage = crsrSent[ud];  /* release what was pressed */
+            }
+        }
+    }
+    if (ev & EV_PRESSED) keyDown(usage);
+    else                 keyUp(usage);
+    return 1;
 }
 
 static void buildReport(void)
@@ -230,16 +283,12 @@ int main(void)
         if (key2usb_event_ready()) {
             uint8_t ev    = key2usb_read_latch();
             key2usb_clear_ready();
-            if (ev == EV_SYNC) {
+            if (ev == EV_SYNC || ev == EV_SYNC128) {
+                c128 = (ev == EV_SYNC128);  /* safe: nothing is held now */
                 if (releaseAll())
                     reportSends = REPORT_SENDS;
-            } else {
-                uint8_t usage = pgm_read_byte(&keymap[EV_KEYID(ev)]);
-                if (usage != HID_NONE) {
-                    if (ev & EV_PRESSED) keyDown(usage);
-                    else                 keyUp(usage);
-                    reportSends = REPORT_SENDS;
-                }
+            } else if (keyEvent(ev)) {
+                reportSends = REPORT_SENDS;
             }
         }
 
@@ -253,6 +302,11 @@ int main(void)
             usbSetInterrupt(reportBuffer, sizeof(reportBuffer));
             reportSends--;
             lastSent = tick;
+            if (reportSends == 0 && tapUsage) {   /* tap pressed: release */
+                keyUp(tapUsage);
+                tapUsage = 0;
+                reportSends = REPORT_SENDS;
+            }
         }
     }
 }

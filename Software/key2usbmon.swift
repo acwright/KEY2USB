@@ -10,7 +10,7 @@
 //  macOS only lets root seize a keyboard, so run it with sudo for that;
 //  without sudo it still monitors, and macOS sees the keystrokes too.
 //
-//  usage: [sudo] key2usbmon [--check] [--joy] [--all] [--no-seize]
+//  usage: [sudo] key2usbmon [--check] [--joy] [--c128] [--all] [--no-seize]
 //
 //      (no options)  monitor: one line per change, plus stuck-key warnings
 //      --all         also print the identical reports a host's HID idle rate
@@ -18,6 +18,10 @@
 //      --check       checklist: press and release every C64 key (and RESTORE)
 //                    until all are ticked off - a quick per-unit QA pass
 //      --joy         with --check, also require all ten joystick contacts
+//      --c128        name keys as the cartridge's C128 bank sends them (mode
+//                    jumper = C128): x128 host keys, plus the keypad, ESC, TAB,
+//                    ALT, HELP, LINE FEED, NO SCROLL, cursor pad, CAPS LOCK and
+//                    40/80 DISPLAY. With --check: 89 keys.
 //      --no-seize    do not try to seize; macOS sees the keystrokes as well
 //
 //  Needs Input Monitoring permission for the terminal app that runs it
@@ -65,7 +69,23 @@ let joystickKeys: [(UInt8, String)] = [
 let modifierKeys: [(UInt8, String)] = [
     (0, "C="), (1, "LEFT SHIFT"), (5, "RIGHT SHIFT"),
 ]
-let usageNames = Dictionary(uniqueKeysWithValues: matrixKeys + joystickKeys)
+// --c128: the cartridge's C128 bank (jumper = C128) makes the controller use
+// x128's host keys instead (keymap128 in keymap.h). These override the names
+// above. In native mode x128 has no host key for the main CRSR keys, so they
+// share Right/Down with the cursor pad and cannot be told apart here.
+let c128Mode = CommandLine.arguments.contains("--c128")
+let c128Keys: [(UInt8, String)] = [
+    (0x3A, "F1"), (0x3B, "F3"), (0x3C, "F5"), (0x3D, "F7"),
+    (0x3E, "HELP"), (0x3F, "LINE FEED"), (0x40, "40/80"), (0x41, "NO SCROLL"),
+    (0x42, "ESC"), (0x43, "TAB"), (0x44, "ALT"), (0x45, "CAPS LOCK"),
+    (0x4F, "CRSR L/R|PAD →"), (0x51, "CRSR U/D|PAD ↓"), (0x50, "PAD ←"), (0x52, "PAD ↑"),
+    (0x59, "KP 1"), (0x5A, "KP 2"), (0x5B, "KP 3"), (0x5C, "KP 4"), (0x5D, "KP 5"),
+    (0x5E, "KP 6"), (0x5F, "KP 7"), (0x60, "KP 8"), (0x61, "KP 9"), (0x62, "KP 0"),
+    (0x63, "KP ."), (0x56, "KP +"), (0x57, "KP -"), (0x58, "KP ENTER"),
+]
+let usageNames: [UInt8: String] = c128Mode
+    ? Dictionary(matrixKeys + c128Keys, uniquingKeysWith: { _, c128 in c128 })
+    : Dictionary(uniqueKeysWithValues: matrixKeys + joystickKeys)
 
 func labels(of report: [UInt8]) -> Set<String> {
     var held = Set<String>()
@@ -80,16 +100,26 @@ func labels(of report: [UInt8]) -> Set<String> {
 
 // ---- options -------------------------------------------------------------------
 let args = Set(CommandLine.arguments.dropFirst())
-let known: Set<String> = ["--check", "--joy", "--all", "--no-seize", "-h", "--help"]
+let known: Set<String> = ["--check", "--joy", "--c128", "--all", "--no-seize", "-h", "--help"]
 if !args.isSubset(of: known) || args.contains("-h") || args.contains("--help") {
-    print("usage: [sudo] key2usbmon [--check] [--joy] [--all] [--no-seize]")
+    print("usage: [sudo] key2usbmon [--check] [--joy] [--c128] [--all] [--no-seize]")
     exit(args.isSubset(of: known) ? 0 : 2)
 }
 let checkMode = args.contains("--check")
 let showAll = args.contains("--all")
 let seize = !args.contains("--no-seize")
-var checklist = matrixKeys.map { $0.1 } + modifierKeys.map { $0.1 }
-if args.contains("--joy") { checklist += joystickKeys.map { $0.1 } }
+var checklist: [String] = []
+for (usage, _) in matrixKeys + (c128Mode ? c128Keys : []) {
+    if let name = usageNames[usage], !checklist.contains(name) { checklist.append(name) }
+}
+checklist += modifierKeys.map { $0.1 }
+if args.contains("--joy") {
+    if c128Mode {
+        print("note: --joy is ignored with --c128 - the sticks share the keypad's host keys there")
+    } else {
+        checklist += joystickKeys.map { $0.1 }
+    }
+}
 
 setvbuf(stdout, nil, _IOLBF, 0)
 
@@ -144,7 +174,7 @@ final class Monitor {
             passed.formUnion(newlyPassed)
             for k in newlyPassed.intersection(checklist).sorted() {
                 let left = checklist.filter { !passed.contains($0) }
-                print("  ✓ \(k.padding(toLength: 11, withPad: " ", startingAt: 0)) \(checklist.count - left.count)/\(checklist.count)")
+                print("  ✓ \(k.padding(toLength: 15, withPad: " ", startingAt: 0)) \(checklist.count - left.count)/\(checklist.count)")
                 if left.isEmpty {
                     print("\nALL \(checklist.count) KEYS PASS (each seen pressed and released)")
                     summary(); exit(0)
@@ -214,8 +244,8 @@ let matchCallback: IOHIDDeviceCallback = { _, _, _, device in
     let maker = IOHIDDeviceGetProperty(device, kIOHIDManufacturerKey as CFString) as? String ?? "?"
     let bcd = IOHIDDeviceGetProperty(device, kIOHIDVersionNumberKey as CFString) as? Int ?? 0
     let version = String(format: "%x.%02x", bcd >> 8, bcd & 0xFF)
-    let firmware = bcd >= 0x0120
-        ? "v1.2+ controller firmware: SYNC + RESTORE"
+    let firmware = bcd >= 0x0130 ? "v1.3+ controller firmware: SYNC, RESTORE, C128 mappings"
+        : bcd >= 0x0120 ? "v1.2 controller firmware: SYNC + RESTORE"
         : "v1.1.x or earlier controller firmware"
     print("connected: \(maker) \(name), bcdDevice \(version) (\(firmware))")
 

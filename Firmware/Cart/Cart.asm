@@ -27,26 +27,26 @@
 .include "Cart.inc"
 
 VERSION_MAJOR = 1
-VERSION_MINOR = 2
-VERSION_PATCH = 1
+VERSION_MINOR = 3
+VERSION_PATCH = 0
 
 ; ---------------------------------------------------------------------------
-; Build option: C128 extended-key scan (numeric keypad / ESC / TAB / ALT /
-; HELP / cursor pad via $D02F). DISABLED by default.
+; Build option SCAN_EXTENDED (C128 bank only): scan the C128's extra keys -
+; numeric keypad, ESC, TAB, ALT, HELP, LINE FEED, NO SCROLL, cursor pad (via
+; $D02F) and the CAPS LOCK / 40/80 DISPLAY latches. EXPERIMENTAL; build it
+; with `make EXTENDED=1`.
 ;
-; It is unverified on real C128 hardware, the ATmega currently leaves keyIDs
-; 64+ unmapped (so it adds no usable keys), and unstable extended-line reads
-; flood the event pipeline - which destabilises normal key scanning on a real
-; C128 (intermittent/missed keys plus erratic repeat bursts). Verify the scan
-; with a logic analyzer on $D02F / $DC01, and add the keyID 64+ entries to the
-; ATmega keymap, before defining this.
+; An early (v1.0-era) attempt made a real C128's keyboard erratic. That build
+; also had the emit_event Y bug and single, unsettled row reads, both fixed
+; since; whether either was the cause is what this experiment establishes.
 ; ---------------------------------------------------------------------------
-; .define SCAN_EXTENDED
 
 .ifdef TARGET_C128
 BANNER_MODE_LEN = 9
 BANNER_MODE_COL = 15
+SYNC_EVENT = EV_SYNC128                 ; also selects the ATmega's C128 map
 .else
+SYNC_EVENT = EV_SYNC
 BANNER_MODE_LEN = 8
 BANNER_MODE_COL = 16
 .endif
@@ -85,6 +85,7 @@ pass:      .res 1                       ; scan_matrix emit pass (0..2)
 curstate:  .res 8                       ; this scan's pressed bitmap per column
 prevstate: .res 8                       ; previous pressed bitmap per matrix column
 prevext:   .res 3                       ; previous pressed bitmap per C128 K-column
+prevlock:  .res 1                       ; previous C128 latch bitmap (CAPS, 40/80)
 joy2cur:   .res 1                       ; this scan's closed contacts, joy port 2
 joy1cur:   .res 1                       ; this scan's closed contacts, joy port 1
 prevjoy2:  .res 1                       ; previous closed-contact bitmap, port 2
@@ -213,6 +214,7 @@ coldstart:
 @ze:    sta     prevext,x
         dex
         bpl     @ze
+        sta     prevlock
         sta     prevjoy2
         sta     prevjoy1
 
@@ -220,7 +222,7 @@ coldstart:
         ; (or after a crash). Start from a known-clean host state.
         lda     #SYNC_SCANS
         sta     synccnt
-        lda     #EV_SYNC
+        lda     #SYNC_EVENT
         jsr     emit_event
 
 ; -----------------------------------------------------------------------------
@@ -320,11 +322,14 @@ scan_matrix:
 .ifdef TARGET_C128
 .ifdef SCAN_EXTENDED
 ; -----------------------------------------------------------------------------
-;   scan_extended - C128 numeric keypad / ESC / TAB / ALT / HELP / cursor pad.
+;   scan_extended - C128 numeric keypad / ESC / TAB / ALT / HELP / LINE FEED /
+;   NO SCROLL / cursor pad, then the CAPS LOCK and 40/80 DISPLAY latches.
 ;   The three extra columns K0..K2 live on $D02F bits 0..2 (active low) while
-;   the normal columns are deselected. Extended keyIDs = 64 + kcol*8 + row.
-;   NOTE: label assignments for these keyIDs must be confirmed on real C128
-;   hardware; the scan mechanism is what matters here.
+;   the normal columns are deselected. Extended keyIDs = 64 + kcol*8 + row:
+;     K0: HELP  KP8  KP5  TAB        KP2   KP4  KP7    KP1
+;     K1: ESC   KP+  KP-  LINE FEED  ENTER KP6  KP9    KP3
+;     K2: ALT   KP0  KP.  UP         DOWN  LEFT RIGHT  NO SCROLL
+;   (the C128 KERNAL's decode tables at $FA80 and VICE's x128 keymap agree).
 ; -----------------------------------------------------------------------------
 scan_extended:
         lda     #$ff
@@ -362,7 +367,30 @@ scan_extended:
         bne     @col
         lda     #$ff
         sta     VIC_KBD                 ; deselect extended columns again
-        rts
+
+        ; --- CAPS LOCK / 40/80 DISPLAY latches (0 = latched down) ---
+        lda     #0
+        sta     curpress
+@caps:  lda     CPU_PORT
+        cmp     CPU_PORT
+        bne     @caps
+        and     #CAPS_BIT
+        bne     @d4080
+        inc     curpress                ; bit 0 = CAPS LOCK down
+@d4080: lda     MMU_MCR
+        cmp     MMU_MCR
+        bne     @d4080
+        and     #D4080_BIT
+        bne     @lock
+        lda     curpress
+        ora     #$02                    ; bit 1 = 40/80 DISPLAY down
+        sta     curpress
+@lock:  lda     #LOCK_BASE
+        sta     keybase
+        lda     prevlock                ; old bitmap into A for process_column
+        ldx     curpress                ; (ldx/stx leave A untouched)
+        stx     prevlock
+        jmp     process_column          ; selmask is still $FF
 .endif
 .endif
 
@@ -531,12 +559,21 @@ service_restore:
 
 ; -----------------------------------------------------------------------------
 ;   service_sync - while nothing at all is held, send SYNC every SYNC_SCANS
-;   scans. Any held key, contact or RESTORE restarts the countdown.
+;   scans. Any held key, contact or RESTORE restarts the countdown. The C128
+;   CAPS LOCK / 40/80 latches do not count: the ATmega sends them as taps and
+;   never holds them, and a latched CAPS LOCK must not suppress SYNC.
 ; -----------------------------------------------------------------------------
 service_sync:
         lda     prevjoy2
         ora     prevjoy1
         ora     restorehold
+.ifdef TARGET_C128
+.ifdef SCAN_EXTENDED
+        ora     prevext
+        ora     prevext+1
+        ora     prevext+2
+.endif
+.endif
         ldx     #7
 @any:   ora     prevstate,x
         dex
@@ -545,7 +582,7 @@ service_sync:
         bne     @busy
         dec     synccnt
         bne     @done
-        lda     #EV_SYNC
+        lda     #SYNC_EVENT
         jsr     emit_event
 @busy:  lda     #SYNC_SCANS
         sta     synccnt
@@ -639,7 +676,7 @@ extmask:   .byte $FE,$FD,$FB
 
 ; Screen-code text (uppercase/graphics set: A-Z = 1-26, 0-9 = $30-$39).
 banner_title: .byte 11,5,25,50,21,19,2          ; "KEY2USB"
-              ; "V1.2.1" - V=22, '.'=46, digits = $30+n
+              ; "V1.3.0" - V=22, '.'=46, digits = $30+n
 banner_ver:   .byte 22, $30+VERSION_MAJOR, 46, $30+VERSION_MINOR, 46, $30+VERSION_PATCH
 
 .ifdef TARGET_C128

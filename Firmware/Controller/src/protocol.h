@@ -28,6 +28,20 @@
 #define EV_KEYID(b)  ((b) & 0x7F)
 #define EV_SYNC      0x7F        /* "nothing held" - see above */
 
+/* SYNC128 (keyID 125, break form): SYNC from the cartridge's C128 bank. It
+ * also selects the C128 mappings, because x128 expects the function keys,
+ * cursor keys and the extra C128 keys on different host keys than x64 does.
+ * Plain SYNC selects the C64 mappings again. */
+#define EV_SYNC128   0x7D
+
+/* C128 bank only: CAPS LOCK and 40/80 DISPLAY, latching keys outside the
+ * matrix (make = latched down). Extended matrix keys are 64..87. */
+#define KEY_CAPS     88
+#define KEY_4080     89
+
+#define KEY_CRSR_LR  2           /* C64/C128 matrix CRSR keys */
+#define KEY_CRSR_UD  7
+
 /* RESTORE pulls NMI rather than sitting in the matrix, and only on its press
  * edge, so the cartridge reports each press as a ~100 ms make/break tap. */
 #define KEY_RESTORE  126
