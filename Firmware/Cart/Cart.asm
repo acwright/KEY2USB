@@ -28,7 +28,7 @@
 
 VERSION_MAJOR = 1
 VERSION_MINOR = 2
-VERSION_PATCH = 0
+VERSION_PATCH = 1
 
 ; ---------------------------------------------------------------------------
 ; Build option: C128 extended-key scan (numeric keypad / ESC / TAB / ALT /
@@ -107,6 +107,20 @@ coldstart:
 .ifdef TARGET_C128
         lda     #MMU_CART_KERNAL
         sta     MMU_CR                  ; KERNAL + CPU vectors back at $C000-$FFFF
+
+        ; We run before IOINIT (see Cart.inc), so do the parts of it we
+        ; depend on: the 8502 port (character ROM visible to the VIC, CPU
+        ; and VIC on the same colour RAM bank), and the VIC-IIe registers
+        ; nothing else sets - power-up leaves them random.
+        lda     #C128_PORT_INIT
+        sta     CPU_PORT                ; data first, as IOINIT does,
+        lda     #C128_DDR_INIT
+        sta     CPU_DDR                 ; then drive the outputs
+        lda     #0
+        sta     VIC_SPENA               ; no sprites
+        sta     VIC_IRQEN               ; no VIC interrupts
+        lda     #C128_CLKRATE_INIT
+        sta     VIC_CLKRATE             ; 1 MHz: the 40-column display needs it
 .endif
 
         ; --- bring up the machine ourselves --------------------------------
@@ -625,7 +639,7 @@ extmask:   .byte $FE,$FD,$FB
 
 ; Screen-code text (uppercase/graphics set: A-Z = 1-26, 0-9 = $30-$39).
 banner_title: .byte 11,5,25,50,21,19,2          ; "KEY2USB"
-              ; "V1.2.0" - V=22, '.'=46, digits = $30+n
+              ; "V1.2.1" - V=22, '.'=46, digits = $30+n
 banner_ver:   .byte 22, $30+VERSION_MAJOR, 46, $30+VERSION_MINOR, 46, $30+VERSION_PATCH
 
 .ifdef TARGET_C128

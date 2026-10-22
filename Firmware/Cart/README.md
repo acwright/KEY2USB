@@ -124,6 +124,14 @@ Notes
   - **C128**: `$FF05` pushes A/X/Y and `$FF00`, then switches to config 0, which
     unmaps the cartridge. The handler is copied to RAM (`$0B00`) and leaves
     through the KERNAL's own exit at `$FF33`.
+- The C128 KERNAL calls an autostart (ID `$01`) function ROM from its ROM poll
+  (`$E242` → `$E26B`) *before* IOINIT (`$E109`), in every KERNAL revision. The
+  8502 port's DDR is still all-inputs then, so bit 2 of `$01` floats high and
+  the VIC reads character shapes from RAM: a screen of striped garbage on real
+  hardware, while x128 happened to model those bits low and looked fine. The
+  C128 bank therefore writes IOINIT's port values itself (`$01 = $E3`, then
+  `$00 = $2F`) and clears the VIC-IIe registers nothing else initialises
+  (sprites, VIC interrupts, `$D030` 2 MHz/test). Fixed in v1.2.1.
 - The C128 KERNAL starts a function ROM with `$FF00 = $2A`, which maps
   `$C000-$FFFF` to external function ROM *high*. The cartridge does not decode
   `/ROMH`, so the CPU vectors read open bus (`$FFFF` in VICE) and any NMI went

@@ -98,5 +98,22 @@ EXT_BASE  = 64
 ; $C000-$FFFF (I/O on, RAM at $4000-$7FFF, bank 0).
 MMU_CR      = $FF00
 MMU_CART_KERNAL = $0A
+
+; ---- C128 start-up state -----------------------------------------------------
+; The KERNAL calls an autostart (ID $01) function ROM straight from its ROM
+; poll ($E242 -> $E26B), BEFORE IOINIT ($E109) - in every C128 KERNAL revision.
+; Nothing has configured the 8502 port or the VIC-IIe at that point. With the
+; port's DDR still all-inputs, bit 2 of $01 floats high and the VIC reads
+; character shapes from RAM: a screen of striped garbage on real hardware
+; (x128 happened to model those bits low). These are IOINIT's own values.
+CPU_DDR     = $00       ; 8502 port data direction
+CPU_PORT    = $01       ; 8502 port data
+C128_PORT_INIT = $E3    ; colour RAM bank 1 for CPU and VIC; bit 2 = 0: the VIC
+                        ; sees the character ROM
+C128_DDR_INIT  = $2F    ; bits 0-3 and 5 outputs
+VIC_SPENA   = $D015     ; sprite enable
+VIC_IRQEN   = $D01A     ; VIC interrupt enable
+VIC_CLKRATE = $D030     ; VIC-IIe: bit 0 = 2 MHz, bit 1 = test
+C128_CLKRATE_INIT = $FC ; 1 MHz, test off (IOINIT's value)
 C128_NMIEXIT = $FF33    ; KERNAL NMI exit: restore $FF00, Y, X, A, then RTI
 NMI_STUB    = $0B00     ; RAM home of the C128 NMI stub (cassette buffer)

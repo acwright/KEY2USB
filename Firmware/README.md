@@ -60,6 +60,14 @@ Both firmwares share a version number. The cartridge shows it on its splash
 screen; the controller reports it as the USB `bcdDevice` (`1.20` = v1.2.0,
 visible in `Software/key2usbmon`).
 
+**v1.2.1** — cartridge EEPROM only; the controller is unchanged and still
+reports `1.20`.
+- C128 bank: the 40-column screen showed striped garbage on a real C128. The
+  C128 KERNAL starts an autostart function ROM before IOINIT, so the 8502 port
+  was unconfigured and the VIC read its character shapes from RAM. The C128
+  bank now sets the port and the VIC-IIe registers it relies on itself. The
+  C64 bank is unchanged apart from its version number.
+
 **v1.2.0**
 - RESTORE no longer crashes the cartridge to BASIC (C64 bank: the NMI handler
   popped three bytes that were never pushed; C128 bank: the CPU vectors read
