@@ -177,7 +177,9 @@ cross-trigger between the two ports. Only the symbols are free, and they sit
 sensibly on the pad (`/` left of `*`, `−` above `+`).
 
 Point VICE at them with **Settings → Joystick → Keyset A / Keyset B**, then
-assign the keyset to the emulated port.
+assign the keyset to the emulated port, and tick **Allow keyset joysticks**:
+without it VICE ignores keysets and the Numpad device, and the sticks just type
+keypad keys.
 
 Both sets use usages that **no matrix key can produce**, which is deliberate.
 A held port-1 direction grounds a row line and phantom-presses all 8 keys in

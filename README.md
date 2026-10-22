@@ -195,11 +195,17 @@ One setting trips people up every time, so set it before anything else:
 
 Both joystick ports are scanned by the cartridge and arrive at the host as
 **ordinary keystrokes**, so VICE has to be told which keys mean "joystick".
-Everything lives on the numeric keypad, split so the two ports cannot collide:
+Everything lives on the numeric keypad, split so the two ports cannot collide.
 
-**Port 2** — the easy one, no configuration at all:
+First tick **Settings → Joystick → Allow keyset joysticks**. Without it VICE
+ignores both the Numpad device and keysets, and the stick just types keypad
+keys. VICE keeps this setting separately for each emulator (`x64sc`, `x128` …),
+so set it in each one you use.
 
-> **Settings → Joystick → Joystick Port #2 → Numpad**
+**Port 2** — the easy one, nothing else to configure:
+
+> **Settings → Joystick → Joystick Port #2 → Numpad** (called *Keypad* in some
+> VICE versions)
 
 VICE's built-in Numpad device already maps keypad digits (`8/2/4/6` for
 directions, `7/9/1/3` for diagonals, `0`/`5` for fire), and the cartridge's
@@ -268,9 +274,10 @@ expects. Use **Settings → Keyboard → Keyboard Mapping → Positional** here 
 
 Three things behave differently from C64 mode:
 
-- **The keypad is the C128 keypad.** VICE's Numpad joystick device claims the same
-  host keys, so set **Joystick Port #2 → None** (or a keyset off the keypad) while
-  typing on the keypad, or the keys move the joystick instead of typing.
+- **The keypad is the C128 keypad, and also the port-2 joystick.** They share host
+  keys, so choose per session: for the joystick, set **Joystick Port #2 → Numpad**
+  (or *Keypad*) with **Allow keyset joysticks** ticked, and the C128 keypad then
+  moves the stick too; to type on the keypad, set **Joystick Port #2 → None**.
 - **CRSR keys.** In native mode `x128` drives only the separate cursor pad from the
   host arrows, and SHIFT does not reverse it. The cartridge therefore sends the
   main CRSR keys as Right/Down, or Left/Up while SHIFT is held, so they move the
@@ -280,7 +287,9 @@ Three things behave differently from C64 mode:
   follows the real key. If they ever disagree, toggle the key twice. 40/80 only
   takes effect at reset, as on the real machine.
 
-`Software/key2usbmon --c128 --check` checks all 89 keys from the host side.
+`Software/key2usbmon --c128 --check` checks all 89 keys from the host side, and
+`Software/key2usbtest128.prg` (BASIC 7.0, run inside `x128`) names each key `x128`
+sees, plus the CAPS LOCK and 40/80 state.
 
 ### VIC-20 (`xvic`)
 
@@ -334,6 +343,9 @@ Host-side test software:
   ports plus the last keystrokes received, so you can verify your VICE
   configuration. Build with `make key2usbtest.prg` (requires `petcat`, which
   ships with VICE) or use the prebuilt `.prg`.
+- `key2usbtest128.prg` is the BASIC 7.0 equivalent for `x128` in C128 mode (mode
+  jumper on C128). It names every C128 key `x128` sees, including the keypad and
+  the other extra keys, plus the CAPS LOCK and 40/80 state.
 
 See [Software/README.md](Software/README.md).
 
