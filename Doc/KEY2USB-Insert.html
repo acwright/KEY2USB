@@ -240,9 +240,9 @@
         </ol>
         <p class="note">
           <strong>Before closing the case:</strong> fit the jumper cap on <span class="kbd">J1</span>
-          in the <strong>C64</strong> position (the GND side, marked on the silkscreen) — the
-          supported setting, and covers every machine listed below. (The board's other firmware bank
-          holds an unsupported C128 native-mode build, kept for the curious.)
+          in the <strong>C64</strong> position (the GND side, marked on the silkscreen) — right for
+          every machine listed below. C128 owners may choose the <strong>C128</strong> position
+          instead; see Compatibility.
         </p>
       </section>
 
@@ -250,14 +250,20 @@
         <h2>Compatibility</h2>
         <table>
           <tr><td class="k">Commodore 64 / 64C</td><td>Yes — primary target</td></tr>
-          <tr><td class="k">Commodore 128 / 128D</td><td>Yes — boots straight into C64 mode</td></tr>
+          <tr><td class="k">Commodore 128 / 128D</td><td>Yes — C64 mode, or native C128 mode</td></tr>
           <tr><td class="k">Ultimate 64</td><td>Yes — verified on hardware</td></tr>
         </table>
         <p class="note">
-          On a C128 the cartridge asserts <span class="kbd">/EXROM</span>, so it comes up in C64 mode
-          on its own; if one does not autostart, power on holding <span class="kbd">C=</span>. Its
-          extra keys (keypad, ESC, TAB, ALT, HELP, cursor pad) sit outside the standard 8×8 matrix
-          and are not reported; every key it shares with the C64 works.
+          <strong>C128, J1 on C64:</strong> the cartridge asserts <span class="kbd">/EXROM</span>, so
+          the C128 comes up in C64 mode on its own (if one does not autostart, power on holding
+          <span class="kbd">C=</span>). Every key it shares with the C64 works; its extra keys are not
+          reported.
+        </p>
+        <p class="note">
+          <strong>C128, J1 on C128:</strong> the cartridge runs in native C128 mode and sends the
+          whole keyboard — keypad, ESC, TAB, ALT, HELP, LINE FEED, NO SCROLL, cursor pad, CAPS LOCK,
+          40/80 — to VICE's <span class="kbd">x128</span> (Positional there too). To type on the
+          keypad, set Joystick Port #2 to <strong>None</strong>. Use this position on a C128 only.
         </p>
       </section>
 
@@ -279,21 +285,20 @@
           <li>Type on the C64. Keystrokes arrive at the PC.</li>
         </ol>
         <p class="note">
-          While KEY2USB is running the C64 is dedicated to being a keyboard and does not return to
-          BASIC. Power off and remove the cartridge to use the machine normally.
+          While KEY2USB runs, the C64 is a dedicated keyboard; power off and remove the cartridge to
+          use it normally. RUN/STOP&nbsp;+&nbsp;RESTORE works in VICE (RESTORE arrives as
+          Page&nbsp;Up).
         </p>
       </section>
 
       <section>
         <h2>Joysticks in VICE</h2>
         <p>
-          Both joystick ports are scanned and arrive at the host as ordinary keypad keystrokes, so
-          VICE must be told which keys mean "joystick."
+          Both ports arrive as keypad keystrokes, so VICE must be told which keys mean "joystick."
         </p>
         <p>
-          <strong>Port 2</strong> — no configuration needed beyond
-          <strong>Settings → Joystick → Joystick Port #2 → Numpad</strong>. VICE's built-in Numpad
-          device already matches the cartridge's port-2 mapping exactly.
+          <strong>Port 2</strong> — <strong>Settings → Joystick → Joystick Port #2 → Numpad</strong>.
+          VICE's built-in Numpad device matches the cartridge exactly.
         </p>
         <p>
           <strong>Port 1</strong> — needs a keyset, since Numpad can only serve one port. Set
@@ -338,10 +343,15 @@
             <td>Port 2 set to <strong>Numpad</strong>; port 1 set to <strong>Keyset A</strong> and
                 configured as above.</td>
           </tr>
+          <tr>
+            <td class="k">Shift stays on</td>
+            <td>SHIFT LOCK is down — it is wired as LEFT SHIFT.</td>
+          </tr>
         </table>
         <p class="note">
-          <span class="kbd">Software/key2usbtest.prg</span> in the repository shows live joystick
-          state and the last keys received — the quickest way to check a finished build.
+          Repository <span class="kbd">Software/</span>: <span class="kbd">key2usbmon</span> (macOS)
+          shows what the cartridge sends, without VICE; <span class="kbd">key2usbtest.prg</span>
+          shows what VICE receives.
         </p>
       </section>
 
