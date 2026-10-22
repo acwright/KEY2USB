@@ -6,7 +6,8 @@ Two tools, for two questions:
 | Tool | Runs on | Answers |
 |------|---------|---------|
 | `key2usbmon` | macOS, no emulator | Is the cartridge itself sending the right USB reports? |
-| `key2usbtest.prg` | inside VICE | Is VICE configured to understand them? |
+| `key2usbtest.prg` | inside VICE (`x64sc`) | Is VICE configured to understand them? |
+| `key2usbtest128.prg` | inside VICE (`x128`, C128 mode) | The same, for the cartridge's C128 mode |
 
 Start with `key2usbmon` when anything looks wrong: it takes VICE out of the
 picture.
@@ -143,3 +144,46 @@ VICE setup
 See [VICE Setup](../README.md#vice-setup) in the top-level README — the
 keyboard mapping and joystick keyset configuration both matter, and the wrong
 keyboard mapping makes a perfectly working cartridge look broken.
+
+key2usbtest128.prg (inside x128)
+--------------------------------
+The C128-mode counterpart, in BASIC 7.0, for a cartridge with its mode jumper
+on C128. `key2usbtest.prg` cannot run there: it is a C64 BASIC 2 program saved
+for `$0801`, while C128 BASIC programs start at `$1C01`.
+
+    make key2usbtest128.prg     # build (petcat -w70)
+    make run128                 # build, then launch it in x128
+
+Or drag the prebuilt `key2usbtest128.prg` onto a running `x128` in C128 mode.
+
+    key2usb test 128
+
+    key:  kp 8         65
+    mods: shift alt caps
+    40/80: up   (40 col)
+
+    joy2: -
+    joy1: -
+
+    typed: hello key2usb       66
+
+- **key**: the key the C128 KERNAL sees held, named from its own matrix code
+  (`PEEK(212)`; `-` and 88 = none). These codes are the cartridge's keyIDs, so
+  every C128 key is named exactly, including the keypad, HELP, ESC, ALT,
+  LINE FEED, NO SCROLL and the cursor pad. SHIFT, C=, CTRL and ALT never appear
+  here; they are modifiers.
+- **mods**: the KERNAL's modifier flags (`PEEK(211)`): SHIFT, C=, CTRL, ALT, and
+  CAPS LOCK (latched).
+- **40/80**: the 40/80 DISPLAY key (`PEEK(54533)` bit 7). It only changes the
+  screen at reset, as on the real machine.
+- **joy2 / joy1**: BASIC 7's `JOY()`: direction and fire.
+- **typed**: the last 20 characters, plus the code of the last one. C128 BASIC
+  expands F1-F8 and HELP into their key strings (`GRAPHIC`, `DLOAD"` …), so those
+  show as text here; the **key** line shows the key itself.
+
+The keypad and the port-2 joystick share host keys in C128 mode, so choose one:
+for **joy2** to read the stick, set **Settings → Joystick → Joystick Port #2 →
+Numpad** (or *Keypad*) and tick **Allow keyset joysticks** (until then the stick
+just types keypad digits); to type on the keypad, set **Joystick Port #2 → None**. NO SCROLL pauses the
+display (that is what it does in C128 mode); press it again to resume.
+
