@@ -54,9 +54,19 @@ PROGMEM const char usbHidReportDescriptor[USB_CFG_HID_REPORT_DESCRIPTOR_LENGTH] 
 static uint8_t reportBuffer[8];    /* what we transmit                        */
 static uint8_t modifiers;          /* current modifier bitmap                 */
 static uint8_t keys[6];            /* currently-held non-modifier HID usages  */
-static uint8_t reportDirty;        /* set when the report needs (re)sending   */
+static uint8_t reportSends;        /* times the current state still goes out  */
 
 static uint8_t idleRate;           /* HID idle rate, in 4 ms units (0 = off)  */
+static uint8_t protocol = 1;       /* HID protocol: 0 = boot, 1 = report      */
+
+/* V-USB marks an interrupt report as sent the moment it transmits it, without
+ * waiting for the host's ACK (see asmcommon.inc). A report the host failed to
+ * receive is simply gone. A host that sets an idle rate gets the state again
+ * soon anyway (macOS asks for it every 24 ms), but with idle rate 0 nothing
+ * would repeat it - a lost "all released" report leaves a key held on the
+ * host. So every state change goes out twice, one poll apart; hosts ignore an
+ * identical repeat. */
+#define REPORT_SENDS 2
 
 static void keyDown(uint8_t usage)
 {
@@ -83,6 +93,18 @@ static void keyUp(uint8_t usage)
         if (keys[i] == usage) { keys[i] = 0; return; }
 }
 
+/* SYNC: release everything. Returns 1 if anything was still held. */
+static uint8_t releaseAll(void)
+{
+    uint8_t i, held = modifiers;
+    modifiers = 0;
+    for (i = 0; i < 6; i++) {
+        held |= keys[i];
+        keys[i] = 0;
+    }
+    return held != 0;
+}
+
 static void buildReport(void)
 {
     uint8_t i;
@@ -93,22 +115,31 @@ static void buildReport(void)
 }
 
 /* --------------------------------------------------------------------------
- *  1 ms tick (Timer0 CTC) - drives the HID idle timer only
+ *  4 ms tick (Timer0 CTC, polled) - drives the HID idle timer only
+ *
+ *  Polled, not an interrupt: V-USB requires every other ISR to be
+ *  interruptible (usbdrv.h, "Interrupt latency"), and v1.1's plain 1 ms ISR
+ *  held off the USB interrupt for ~35 cycles each time. The main loop comes round
+ *  far more often than every 4 ms, so no tick is missed. One tick is also the
+ *  HID idle unit, so idleRate (max 255 = 1020 ms) compares directly against
+ *  the 8-bit tick difference.
  * -------------------------------------------------------------------------- */
-static volatile uint8_t msTick;    /* free-running millisecond counter        */
-
-ISR(TIMER0_COMPA_vect)
-{
-    msTick++;
-}
+static uint8_t tick;               /* free-running 4 ms counter               */
 
 static void timer0Init(void)
 {
-    /* CTC, prescaler 64: 16 MHz / 64 / 250 = 1000 Hz */
+    /* CTC, prescaler 256: 16 MHz / 256 / 250 = 250 Hz */
     TCCR0A = (1 << WGM01);
-    TCCR0B = (1 << CS01) | (1 << CS00);
+    TCCR0B = (1 << CS02);
     OCR0A  = 249;
-    TIMSK0 = (1 << OCIE0A);
+}
+
+static void timer0Poll(void)
+{
+    if (TIFR0 & (1 << OCF0A)) {
+        TIFR0 = (1 << OCF0A);      /* write 1 to clear */
+        tick++;
+    }
 }
 
 /* --------------------------------------------------------------------------
@@ -129,6 +160,12 @@ usbMsgLen_t usbFunctionSetup(uchar data[8])
             return 1;
         case USBRQ_HID_SET_IDLE:
             idleRate = rq->wValue.bytes[1];
+            return 0;
+        case USBRQ_HID_GET_PROTOCOL:          /* required of boot devices; */
+            usbMsgPtr = (usbMsgPtr_t)&protocol;   /* both protocols share  */
+            return 1;                             /* the same 8-byte report */
+        case USBRQ_HID_SET_PROTOCOL:
+            protocol = rq->wValue.bytes[0];
             return 0;
         default:
             break;
@@ -158,7 +195,7 @@ static void ioInit(void)
 
 int main(void)
 {
-    uint8_t lastIdle = 0;
+    uint8_t lastSent = 0;
 
     /* Guard against a watchdog reset loop: clear the flag and disable the WDT
      * before it can expire at its post-reset (16 ms) timeout. */
@@ -187,32 +224,35 @@ int main(void)
     for (;;) {
         wdt_reset();
         usbPoll();
+        timer0Poll();
 
         /* Drain one key event per iteration (the 6502 paces its writes). */
         if (key2usb_event_ready()) {
             uint8_t ev    = key2usb_read_latch();
             key2usb_clear_ready();
-            uint8_t usage = pgm_read_byte(&keymap[EV_KEYID(ev)]);
-            if (usage != HID_NONE) {
-                if (ev & EV_PRESSED) keyDown(usage);
-                else                 keyUp(usage);
-                reportDirty = 1;
+            if (ev == EV_SYNC) {
+                if (releaseAll())
+                    reportSends = REPORT_SENDS;
+            } else {
+                uint8_t usage = pgm_read_byte(&keymap[EV_KEYID(ev)]);
+                if (usage != HID_NONE) {
+                    if (ev & EV_PRESSED) keyDown(usage);
+                    else                 keyUp(usage);
+                    reportSends = REPORT_SENDS;
+                }
             }
         }
 
         /* HID idle: resend the current report every idleRate*4 ms. */
-        if (idleRate != 0) {
-            uint8_t now = msTick;
-            if ((uint8_t)(now - lastIdle) >= (uint8_t)(idleRate << 2)) {
-                lastIdle = now;
-                reportDirty = 1;
-            }
-        }
+        if (idleRate != 0 && reportSends == 0 &&
+            (uint8_t)(tick - lastSent) >= idleRate)
+            reportSends = 1;
 
-        if (reportDirty && usbInterruptIsReady()) {
+        if (reportSends && usbInterruptIsReady()) {
             buildReport();
             usbSetInterrupt(reportBuffer, sizeof(reportBuffer));
-            reportDirty = 0;
+            reportSends--;
+            lastSent = tick;
         }
     }
 }

@@ -20,6 +20,7 @@ A non-invasive **Commodore 64** expansion port cartridge that lets the machine's
 - [Firmware](#firmware)
 - [VICE Setup](#vice-setup)
   - [Joysticks](#joysticks)
+  - [RESTORE](#restore)
   - [Verifying your setup](#verifying-your-setup)
   - [VIC-20 (xvic)](#vic-20-xvic)
 - [Software](#software)
@@ -139,6 +140,9 @@ flash, and layout details). Set VICE's keyboard mapping to **Positional** — se
 - Scan the 8×8 keyboard matrix directly via CIA #1 (`$DC00`/`$DC01`) for raw make/break events and modifier state — no KERNAL buffer.
 - Scan **both joystick ports** on the same CIA #1 ports (they share the matrix lines, so no extra hardware is involved).
 - On any key or joystick state change, write a one-byte event to `$DE00`.
+- Report RESTORE (an NMI, not a matrix key) as its own event.
+- While nothing is held, send a SYNC event about once a second so the ATmega
+  can release anything it still believes is down.
 
 The upper bank holds the C128 native-mode firmware, which autostarts from a
 `CBM` / `$01` external function ROM header and scans the same 8×8 matrix. Extended-key
@@ -147,7 +151,7 @@ compiled in — it is unverified on hardware. See `Firmware/Cart/README.md`.
 
 **ATmega328/328P side:**
 - Poll `RDY`; on set, read the key byte from `PINC`/`PINB`, pulse `/CLRRDY`.
-- Run V-USB (low-speed USB 1.1); translate to USB HID usages and send an 8-byte boot-protocol keyboard report.
+- Run V-USB (low-speed USB 1.1); translate to USB HID usages and send an 8-byte boot-protocol keyboard report (each one twice, since V-USB cannot re-send a report the host missed).
 - Configured as a self-powered USB device.
 
 ## VICE Setup
@@ -212,9 +216,15 @@ port-2 mapping was chosen to match it exactly.
 
 Port 1 uses keypad *symbols* rather than digits or function keys for two
 reasons: the digits are already claimed by the Numpad device serving port 2,
-and the function-key row proved unreliable — F12 was silently undeliverable on
-a macOS + GTK3 VICE host, with no identifiable cause. The symbols are untouched
-by both.
+and VICE's positional keymap binds F12 to RESTORE, so a function-key keyset
+cannot use it. The symbols are untouched by both.
+
+### RESTORE
+
+RESTORE is not part of the keyboard matrix (it pulls the C64's NMI line), but
+the cartridge reports each press anyway, as **Page Up** — the key VICE's
+positional keymap uses for RESTORE. RUN/STOP + RESTORE works in the emulator
+with no configuration.
 
 ### A caveat worth knowing
 
@@ -233,7 +243,9 @@ pressing a key in that same column.
 
 `Software/key2usbtest.prg` shows live joystick state for both ports plus the
 last keys received, so you can confirm the cartridge and your VICE
-configuration in one place. See [Software/](Software/).
+configuration in one place. On a Mac, `Software/key2usbmon` checks the
+cartridge itself with VICE out of the picture: it reads the raw USB reports and
+names the C64 key behind each one. See [Software/](Software/).
 
 ### VIC-20 (`xvic`)
 
@@ -277,10 +289,17 @@ Two caveats:
 ## Software
 `Software/`
 
-Host-side test software. `key2usbtest.prg` runs inside VICE and shows live
-joystick state for both ports plus the last keystrokes received, so you can
-verify a cartridge and your VICE configuration in one place. Build with
-`make` (requires `petcat`, which ships with VICE) or use the prebuilt `.prg`.
+Host-side test software:
+
+- `key2usbmon` (macOS) reads the cartridge's raw USB reports directly, with no
+  emulator involved, and names the C64 key behind each one. `--check` runs a
+  press-every-key checklist. Build with `make key2usbmon` (requires `swiftc`
+  from the Xcode Command Line Tools).
+- `key2usbtest.prg` runs inside VICE and shows live joystick state for both
+  ports plus the last keystrokes received, so you can verify your VICE
+  configuration. Build with `make key2usbtest.prg` (requires `petcat`, which
+  ships with VICE) or use the prebuilt `.prg`.
+
 See [Software/README.md](Software/README.md).
 
 ## CAD
@@ -332,3 +351,9 @@ boards from a fab and source parts themselves.
 ## License
 
 Hardware designs are released under the [CERN Open Hardware Licence Version 2 – Permissive](https://ohwr.org/cern_ohl_p_v2.txt).
+
+The cartridge ROM firmware (`Firmware/Cart/`) and the controller firmware's own
+sources (`Firmware/Controller/src/`, `include/`) are MIT-licensed. The controller
+firmware links the vendored [V-USB](https://www.obdev.at/vusb/) driver, which is
+GPL v2/v3, so the built controller firmware image is distributed under the GPL;
+this repository is its corresponding source.

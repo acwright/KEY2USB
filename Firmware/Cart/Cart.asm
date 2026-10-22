@@ -8,22 +8,26 @@
 ; then concatenate C64 + C128 into the 8K 28C64 image (see Makefile).
 ;
 ; What it does:
-;   1. Takes over the machine (autostart), masks IRQ, ignores RESTORE (NMI).
+;   1. Takes over the machine (autostart), masks IRQ, and turns RESTORE (NMI)
+;      into an ordinary key event.
 ;   2. Draws a "KEY2USB <version>" splash on the 40-column screen (feedback
 ;      only - the cartridge works headless).
 ;   3. Continuously scans the CIA#1 keyboard matrix and both joystick ports and,
 ;      on every make/break transition, writes an event byte to $DE00. The
 ;      74LS273 latches it and the ATmega picks it up over the RDY handshake.
+;   4. While nothing is held, sends a SYNC event about once a second so the
+;      ATmega can drop any key it still believes is down.
 ;
 ; The 6502 cannot read the RDY flag back, so after every $DE00 write it waits
-; ~2 ms (emit pacing) to guarantee the ATmega has consumed the previous byte
-; before the next transition overwrites the latch.
+; ~5 ms (emit pacing) to guarantee the ATmega has consumed the previous byte
+; before the next transition overwrites the latch. All delays are timed by
+; CIA#1 timer B, so they hold at any CPU speed.
 
 .setcpu "6502"
 .include "Cart.inc"
 
 VERSION_MAJOR = 1
-VERSION_MINOR = 1
+VERSION_MINOR = 2
 VERSION_PATCH = 0
 
 ; ---------------------------------------------------------------------------
@@ -75,13 +79,20 @@ curpress:  .res 1                       ; current pressed bitmap for a column
 changed:   .res 1                       ; bits that changed this scan
 presstmp:  .res 1                       ; 1 = the bit being processed is pressed
 keybase:   .res 1                       ; keyID base for the current column (col*8)
+selmask:   .res 1                       ; bits process_column may emit this call
 idx:       .res 1                       ; outer loop column index
+pass:      .res 1                       ; scan_matrix emit pass (0..2)
+curstate:  .res 8                       ; this scan's pressed bitmap per column
 prevstate: .res 8                       ; previous pressed bitmap per matrix column
 prevext:   .res 3                       ; previous pressed bitmap per C128 K-column
 joy2cur:   .res 1                       ; this scan's closed contacts, joy port 2
 joy1cur:   .res 1                       ; this scan's closed contacts, joy port 1
 prevjoy2:  .res 1                       ; previous closed-contact bitmap, port 2
 prevjoy1:  .res 1                       ; previous closed-contact bitmap, port 1
+synccnt:   .res 1                       ; idle scans left until the next SYNC
+restorereq:  .res 1                     ; bumped by the NMI handler per RESTORE press
+restoreseen: .res 1                     ; restorereq value already reported
+restorehold: .res 1                     ; scans left before RESTORE's break (0 = up)
 
 ; =============================================================================
 ;   Code
@@ -93,6 +104,10 @@ coldstart:
         cld
         ldx     #$ff
         txs                             ; reset stack
+.ifdef TARGET_C128
+        lda     #MMU_CART_KERNAL
+        sta     MMU_CR                  ; KERNAL + CPU vectors back at $C000-$FFFF
+.endif
 
         ; --- bring up the machine ourselves --------------------------------
         ; A CBM80 autostart cart runs from the reset routine BEFORE the KERNAL
@@ -113,11 +128,30 @@ coldstart:
         bit     $DC0D                   ; ack any pending
         bit     $DD0D
 
-        ; --- redirect RESTORE (NMI) to a harmless handler ------------------
-        lda     #<nmi_ignore
-        sta     $0318
-        lda     #>nmi_ignore
-        sta     $0319
+        ; --- route RESTORE (NMI) to our handler ------------------------------
+        lda     #0
+        sta     restorereq
+        sta     restoreseen
+        sta     restorehold
+.ifdef TARGET_C128
+        ; The C128 KERNAL switches $FF00 to config 0 (BASIC ROM at $8000, so
+        ; this cartridge is unmapped) before it jumps through NMINV. The
+        ; handler therefore has to run from RAM.
+        ldx     #NMI_STUB_LEN-1
+@stub:  lda     nmi_stub,x
+        sta     NMI_STUB,x
+        dex
+        bpl     @stub
+        lda     #<NMI_STUB
+        sta     NMINV
+        lda     #>NMI_STUB
+        sta     NMINV+1
+.else
+        lda     #<nmi_restore
+        sta     NMINV
+        lda     #>nmi_restore
+        sta     NMINV+1
+.endif
 
         ; --- configure CIA#1 for keyboard scanning -------------------------
         lda     #$ff
@@ -168,6 +202,13 @@ coldstart:
         sta     prevjoy2
         sta     prevjoy1
 
+        ; A reset can land while the host still holds a key from before it
+        ; (or after a crash). Start from a known-clean host state.
+        lda     #SYNC_SCANS
+        sta     synccnt
+        lda     #EV_SYNC
+        jsr     emit_event
+
 ; -----------------------------------------------------------------------------
 ;   Main loop: scan, emit events, repeat at ~10 ms intervals (debounce).
 ; -----------------------------------------------------------------------------
@@ -184,38 +225,82 @@ mainloop:
         jsr     scan_extended
 .endif
 .endif
+        jsr     service_restore
+        jsr     service_sync
         jsr     scan_delay
         jmp     mainloop
 
 ; -----------------------------------------------------------------------------
 ;   scan_matrix - walk the 8 keyboard columns, emit events on any change.
+;
+;   All eight columns are read first, so the emit phase works from one
+;   snapshot. Each row read repeats until two reads agree, as the KERNAL's own
+;   scan does ($EAAB), so a line still settling after the column switch is
+;   never taken as a key.
+;
+;   Events then go out in three passes so a host sees modifiers wrapped around
+;   the keys they modify, even when both changed within one scan:
+;     pass 0: modifier makes     (SHIFT, CTRL, C= down first)
+;     pass 1: every other change
+;     pass 2: modifier breaks    (released last)
+;   Without this, RIGHT SHIFT (column 6) would always follow a letter in
+;   columns 0-5 that went down in the same scan, and the host would type the
+;   unshifted letter.
 ; -----------------------------------------------------------------------------
 scan_matrix:
-        lda     #0
-        sta     idx
-@col:
-        ldx     idx
-        lda     colmask,x
+        ldx     #7
+@snap:  lda     colmask,x
         sta     CIA1_PRA                ; drive one column low
-        lda     CIA1_PRB                ; read rows (0 = pressed)
+@read:  lda     CIA1_PRB                ; read rows (0 = pressed)
+        cmp     CIA1_PRB
+        bne     @read                   ; still settling - read again
         eor     #$ff                    ; 1 = pressed
+        sta     curstate,x
+        dex
+        bpl     @snap
+
+        lda     #0
+        sta     pass
+@pass:  lda     #0
+        sta     idx
+@col:   ldx     idx
+        lda     curstate,x
         sta     curpress
-        lda     prevstate,x             ; old bitmap
-        pha
-        lda     curpress
-        sta     prevstate,x             ; store new bitmap
-        ; keybase = col * 8
-        txa
+        ldy     pass
+        beq     @mods_down
+        dey
+        beq     @others
+        eor     #$ff                    ; pass 2: modifiers now released
+        and     modmask,x
+        jmp     @emit
+@mods_down:
+        and     modmask,x               ; pass 0: modifiers now pressed
+        jmp     @emit
+@others:
+        lda     modmask,x               ; pass 1: everything but modifiers
+        eor     #$ff
+@emit:  sta     selmask
+        txa                             ; keybase = col * 8
         asl     a
         asl     a
         asl     a
         sta     keybase
-        pla                             ; old bitmap back into A
+        lda     prevstate,x             ; old bitmap
         jsr     process_column
         inc     idx
         lda     idx
         cmp     #8
         bne     @col
+        inc     pass
+        lda     pass
+        cmp     #3
+        bne     @pass
+
+        ldx     #7
+@keep:  lda     curstate,x
+        sta     prevstate,x
+        dex
+        bpl     @keep
         rts
 
 .ifdef TARGET_C128
@@ -236,9 +321,13 @@ scan_extended:
         ldx     idx
         lda     extmask,x
         sta     VIC_KBD                 ; select one K column
-        lda     CIA1_PRB
+@read:  lda     CIA1_PRB
+        cmp     CIA1_PRB
+        bne     @read
         eor     #$ff
         sta     curpress
+        lda     #$ff
+        sta     selmask
         lda     prevext,x
         pha
         lda     curpress
@@ -292,20 +381,24 @@ scan_joystick:
         sta     CIA1_PRA                ; park the column latch high
         lda     #$00
         sta     CIA1_DDRA               ; PA -> inputs so contacts can pull low
-        ldx     #16                     ; ~80 cycles for the pull-ups to settle
-@settle:
-        dex
-        bne     @settle
-        lda     CIA1_PRA                ; joystick 2 on PA0..PA4
+        lda     #<SETTLE_CYCLES         ; let the pull-ups settle
+        ldx     #>SETTLE_CYCLES
+        jsr     cia_wait
+@read2: lda     CIA1_PRA                ; joystick 2 on PA0..PA4
+        cmp     CIA1_PRA
+        bne     @read2
         eor     #$ff                    ; 1 = contact closed
         and     #JOY_MASK
         sta     joy2cur
-        lda     CIA1_PRB                ; joystick 1 on PB0..PB4
+@read1: lda     CIA1_PRB                ; joystick 1 on PB0..PB4
+        cmp     CIA1_PRB
+        bne     @read1
         eor     #$ff
         and     #JOY_MASK
         sta     joy1cur
         lda     #$ff
         sta     CIA1_DDRA               ; restore column drive for scan_matrix
+        sta     selmask                 ; every contact may emit
 
         ; --- port 2 ---
         lda     joy2cur
@@ -332,11 +425,13 @@ scan_joystick:
 ;     entry: A        = previous pressed bitmap
 ;            curpress = current  pressed bitmap
 ;            keybase  = keyID of row 0 in this column
+;            selmask  = which changed bits to emit (others are left alone)
 ;     note:  destroys curpress (shifted out), A, X, Y.
 ; -----------------------------------------------------------------------------
 process_column:
         eor     curpress                ; A = changed bits
-        beq     @done                   ; nothing changed - fast path
+        and     selmask                 ; ... that this call may emit
+        beq     @done                   ; nothing to emit - fast path
         sta     changed
         ldy     #0                      ; row / bit index
 @bit:
@@ -362,59 +457,108 @@ process_column:
         rts
 
 ; -----------------------------------------------------------------------------
-;   emit_event - write one event byte to the latch, then pace ~2 ms.
+;   emit_event - write one event byte to the latch, then pace ~5 ms.
 ;     entry: A = event byte.  Preserves Y; destroys A and X.
 ;
-;   Y MUST survive: process_column keeps its row index in Y across this call,
-;   and the pacing delay below uses Y as its own loop counter. Without the
-;   save/restore the delay returns Y = 0, so the second and every later event
-;   in one column is emitted as keyID keybase+1 instead of keybase+row. That
-;   only shows up when two keys in the same column change within one scan -
-;   uncommon when typing, but constant for a joystick (every diagonal moves
-;   two bits at once).
+;   Y MUST survive: process_column keeps its row index in Y across this call.
+;   (v1.0 paced with a Y-counted loop and emitted every later event in a
+;   column as keybase+1; cia_wait leaves Y alone.)
 ; -----------------------------------------------------------------------------
 emit_event:
         sta     IO1                     ; latch byte + set RDY (74LS273 / 74LS74)
-        tya
-        pha
-        jsr     delay_2ms
-        pla
-        tay
-        rts
-
-; ~2 ms pacing delay. Destroys A, X, Y.
-delay_2ms:
-        ldy     #4
-@a:     ldx     #250
-@b:     dex
-        bne     @b                      ; 250 * ~5 = ~1250 cycles
-        dey
-        bne     @a                      ; * 4  = ~5000 cycles ~= 2 ms @ 1 MHz
-        rts
+        lda     #<PACE_CYCLES
+        ldx     #>PACE_CYCLES
+        jmp     cia_wait
 
 ; -----------------------------------------------------------------------------
 ;   scan_delay - ~10 ms between full scans (natural key debounce).
 ; -----------------------------------------------------------------------------
 scan_delay:
-        ldy     #8
-@a:     ldx     #250
-@b:     dex
-        bne     @b
-        dey
-        bne     @a
+        lda     #<SCAN_CYCLES
+        ldx     #>SCAN_CYCLES
+        ; fall through
+
+; -----------------------------------------------------------------------------
+;   cia_wait - busy-wait A (low) / X (high) system clock cycles on CIA#1
+;   timer B in one-shot mode. The CIA clears START (CRB bit 0) when the timer
+;   underflows. Preserves Y.
+; -----------------------------------------------------------------------------
+cia_wait:
+        sta     CIA1_TBLO
+        stx     CIA1_TBHI
+        lda     #%00011001              ; count system clock, force load,
+        sta     CIA1_CRB                ; one-shot, start
+@wait:  lda     CIA1_CRB
+        lsr     a                       ; carry = START
+        bcs     @wait
         rts
 
 ; -----------------------------------------------------------------------------
-;   nmi_ignore - swallow RESTORE presses so the cart keeps running.
-;   The KERNAL NMI entry pushed A, X, Y before JMP ($0318); unwind and RTI.
+;   service_restore - report each RESTORE press as a short make/break tap.
+;   RESTORE only raises an NMI on its press edge, so the release is not
+;   visible; RESTORE_SCANS of hold is long enough for VICE's RUN/STOP+RESTORE.
 ; -----------------------------------------------------------------------------
-nmi_ignore:
-        pla
-        tay
-        pla
-        tax
-        pla
+service_restore:
+        lda     restorehold
+        beq     @up
+        dec     restorehold
+        bne     @done
+        lda     #KEY_RESTORE            ; hold time over -> break
+        jmp     emit_event
+@up:    lda     restorereq
+        cmp     restoreseen
+        beq     @done                   ; no new press
+        sta     restoreseen
+        lda     #RESTORE_SCANS
+        sta     restorehold
+        lda     #KEY_RESTORE | EV_PRESSED
+        jmp     emit_event
+@done:  rts
+
+; -----------------------------------------------------------------------------
+;   service_sync - while nothing at all is held, send SYNC every SYNC_SCANS
+;   scans. Any held key, contact or RESTORE restarts the countdown.
+; -----------------------------------------------------------------------------
+service_sync:
+        lda     prevjoy2
+        ora     prevjoy1
+        ora     restorehold
+        ldx     #7
+@any:   ora     prevstate,x
+        dex
+        bpl     @any
+        cmp     #0
+        bne     @busy
+        dec     synccnt
+        bne     @done
+        lda     #EV_SYNC
+        jsr     emit_event
+@busy:  lda     #SYNC_SCANS
+        sta     synccnt
+@done:  rts
+
+; -----------------------------------------------------------------------------
+;   RESTORE (NMI) handlers - count the press and resume the scan.
+;
+;   C64: the KERNAL NMI entry ($FE43) is just SEI / JMP (NMINV); A, X and Y
+;   are pushed later, by the default handler at $FE47. Nothing is on the
+;   stack but the CPU's own frame, so RTI is the whole exit. (v1.1 popped
+;   three bytes here that were never pushed, crashing to BASIC on RESTORE.)
+;
+;   C128: the KERNAL entry ($FF05) pushes A, X, Y and $FF00, then switches to
+;   config 0, which unmaps this cartridge. The stub is copied to RAM and leaves
+;   through the KERNAL's own exit at $FF33, which restores all of that.
+; -----------------------------------------------------------------------------
+.ifdef TARGET_C128
+nmi_stub:
+        inc     restorereq
+        jmp     C128_NMIEXIT
+NMI_STUB_LEN = * - nmi_stub
+.else
+nmi_restore:
+        inc     restorereq
         rti
+.endif
 
 ; -----------------------------------------------------------------------------
 ;   clear_screen - fill the 40x25 screen with spaces in white.
@@ -468,6 +612,10 @@ draw_banner:
 
 ; Walking-zero column-select patterns for $DC00 (PA0..PA7).
 colmask:   .byte $FE,$FD,$FB,$F7,$EF,$DF,$BF,$7F
+
+; Rows holding a C64 modifier, per column: LEFT SHIFT (col 1 row 7), RIGHT
+; SHIFT (col 6 row 4), CTRL (col 7 row 2) and C= (col 7 row 5).
+modmask:   .byte $00,$80,$00,$00,$00,$00,$10,$24
 .ifdef TARGET_C128
 .ifdef SCAN_EXTENDED
 ; K0..K2 select patterns for $D02F.
@@ -477,7 +625,7 @@ extmask:   .byte $FE,$FD,$FB
 
 ; Screen-code text (uppercase/graphics set: A-Z = 1-26, 0-9 = $30-$39).
 banner_title: .byte 11,5,25,50,21,19,2          ; "KEY2USB"
-              ; "V1.1.0" - V=22, '.'=46, digits = $30+n
+              ; "V1.2.0" - V=22, '.'=46, digits = $30+n
 banner_ver:   .byte 22, $30+VERSION_MAJOR, 46, $30+VERSION_MINOR, 46, $30+VERSION_PATCH
 
 .ifdef TARGET_C128

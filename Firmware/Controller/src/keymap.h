@@ -22,8 +22,9 @@
  *    C64 up-arrow -> HID '\'     C64 left-arrow -> HID '`'
  *
  *  Edit freely to taste (or to target a different host/emulator). RESTORE is
- *  not in the matrix (it is wired to NMI and swallowed by the ROM), so it has
- *  no entry here.
+ *  not in the matrix (it is wired to NMI); the cartridge reports it as keyID
+ *  126, mapped to Page Up - VICE's positional RESTORE key - so RUN/STOP +
+ *  RESTORE works in the emulator.
  */
 #ifndef KEY2USB_KEYMAP_H
 #define KEY2USB_KEYMAP_H
@@ -41,6 +42,7 @@
 #define HID_TAB       0x2B
 #define HID_SPACE     0x2C
 #define HID_HOME      0x4A
+#define HID_PGUP      0x4B
 #define HID_PGDN      0x4E
 #define HID_RIGHT     0x4F
 #define HID_END       0x4D
@@ -156,16 +158,15 @@ static const uint8_t keymap[128] PROGMEM = {
     [JOY1_LEFT]  = HID_KP_SLASH,   /* KP /     */
     [JOY1_RIGHT] = HID_KP_STAR,    /* KP *     */
     [JOY1_FIRE]  = HID_KP_ENTER,   /* KP enter */
+
+    [KEY_RESTORE] = HID_PGUP,      /* VICE positional: Page_Up -> RESTORE */
 };
 
 /* Why port 1 is on keypad symbols rather than function keys:
- * F12 proved undeliverable on a macOS + GTK3 VICE host. Verified on hardware
- * 2026-07-19 - F8/F9/F10/F11 all registered, F12 never did, including when
- * pressed directly on the host keyboard with the cartridge disconnected. Ruled
- * out: the "use F-keys as standard function keys" setting (enabled), macOS
- * symbolic hotkeys (nothing bound to keycode 111), VICE hotkey files (all F9+
- * bindings are Alt/Command-gated) and the SDL menu key (this is a GTK3 build).
- * Root cause never identified, so port 1 avoids the function-key row entirely.
+ * F12 never reached VICE as a key (verified on hardware 2026-07-19, F8-F11
+ * fine). The cause: VICE's positional keymap binds F12 to RESTORE
+ * (gtk3_pos.vkm: "F12 -3 0"), so VICE consumes it as the RESTORE line rather
+ * than as a joystick keyset key.
  *
  * Keypad DIGITS are not an option: VICE's Numpad joystick device (the port-2
  * setting) claims KP 7/9/1/3 for diagonals and KP 0/5 for fire, so digits

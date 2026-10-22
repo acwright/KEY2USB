@@ -6,7 +6,13 @@
  *
  *      bit 7      : 1 = key pressed (make), 0 = key released (break)
  *      bits 6..0  : keyID  (C64 matrix = col*8+row, 0..63; C128 ext = 64..;
- *                           joystick port 2 = 112..116, port 1 = 120..124)
+ *                           joystick port 2 = 112..116, port 1 = 120..124;
+ *                           RESTORE = 126)
+ *
+ *  0x7F (keyID 127, break form) is SYNC: the cartridge holds nothing, so every
+ *  key, modifier and stick contact must read as released. It is sent at
+ *  power-up/reset and about once a second while idle, so a lost release can
+ *  never leave a key stuck on the host.
  *
  *  Pin contract (verified against Hardware/KEY2USB.kicad_sch, U5):
  *      KB0..KB5 -> PC0..PC5      KB6..KB7 -> PB0..PB1
@@ -20,6 +26,11 @@
 
 #define EV_PRESSED   0x80        /* bit 7 of the event byte */
 #define EV_KEYID(b)  ((b) & 0x7F)
+#define EV_SYNC      0x7F        /* "nothing held" - see above */
+
+/* RESTORE pulls NMI rather than sitting in the matrix, and only on its press
+ * edge, so the cartridge reports each press as a ~100 ms make/break tap. */
+#define KEY_RESTORE  126
 
 /* Joystick keyIDs (mirror of JOY2_BASE / JOY1_BASE in Cart/Cart.inc).
  * Contacts arrive as ordinary key events; the keymap decides what they type. */

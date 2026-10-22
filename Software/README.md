@@ -1,20 +1,90 @@
 KEY2USB — Host Test Software
 ============================
 
-`key2usbtest.prg` is a small BASIC program that verifies a KEY2USB cartridge
-end to end. It runs **inside VICE on the host PC**, not on the Commodore — the
-C64/C128 is busy being a keyboard. It displays what VICE actually received:
-live joystick state for both ports, and the last key plus a short history.
+Two tools, for two questions:
 
-Use it to answer "is the cartridge working, and is VICE configured correctly?"
-without guessing.
+| Tool | Runs on | Answers |
+|------|---------|---------|
+| `key2usbmon` | macOS, no emulator | Is the cartridge itself sending the right USB reports? |
+| `key2usbtest.prg` | inside VICE | Is VICE configured to understand them? |
+
+Start with `key2usbmon` when anything looks wrong: it takes VICE out of the
+picture.
+
+key2usbmon (macOS)
+------------------
+A native command-line tool (Swift + IOKit) that opens the cartridge's USB HID
+interface directly and prints every report it sends, decoded back to the C64
+keys that produced it.
+
+    make key2usbmon     # build (needs swiftc: xcode-select --install)
+    make mon            # build + monitor
+    make check          # build + press-every-key checklist
+
+The first run asks for **Input Monitoring** permission for your terminal app
+(System Settings → Privacy & Security → Input Monitoring). Grant it, quit and
+reopen the terminal, and run again.
+
+**Run it with `sudo` to seize the device** (`sudo ./key2usbmon`): macOS then
+ignores the cartridge's keystrokes, so testing cannot Shift-click or Escape
+your desktop. macOS only lets root seize a keyboard; without `sudo` it still
+monitors, says `not seized`, and the keystrokes reach whatever app has focus —
+so focus something harmless, like an empty TextEdit window.
+
+### Monitor (default)
+
+    key2usbmon - waiting for KEY2USB (USB 16c0:27db)... Ctrl-C to quit
+    connected: acwright KEY2USB, bcdDevice 1.20 (v1.2+ controller firmware: SYNC + RESTORE)
+    device seized: macOS ignores its keystrokes while key2usbmon runs
+
+        time      gap      modifiers .. key slots         change
+      (host HID idle rate: the state is re-sent every ~24 ms; identical reports are hidden, --all shows them)
+       2.114s            20 00 00 00 00 00 00 00   +RIGHT SHIFT   held: RIGHT SHIFT
+       2.130s +   16 ms  20 00 04 00 00 00 00 00   +A   held: A, RIGHT SHIFT
+
+- **bcdDevice** is the controller firmware version: `1.20` is v1.2.0; `0.01`
+  is v1.1 or earlier.
+- The 8 hex bytes are the raw boot-keyboard report: modifier bits, a reserved
+  byte, then six key slots.
+- **change** names the C64 keys that went down (`+`) or up (`-`).
+- macOS sets a 24 ms HID idle rate, so the device re-sends its unchanged state
+  every 24 ms. Those identical reports are hidden; `--all` prints every report,
+  including the deliberate second copy v1.2 firmware sends after each change.
+- A key held for 10 seconds prints a **`! ... held for 10 s - stuck?`**
+  warning. LEFT SHIFT held that long usually means SHIFT LOCK is down: it is
+  wired in parallel with LEFT SHIFT and the cartridge cannot tell them apart.
+- **Ctrl-C** prints a summary, including anything still held.
+
+Things worth watching for: a key that stays in `held:` after you let go; reports
+arriving when nobody is touching the C64; the device disconnecting and
+reconnecting (the controller has reset).
+
+### Checklist (`--check`)
+
+Lists all 65 keys (the 64 matrix keys plus RESTORE) and ticks each one off once
+it has been seen pressed **and** released, finishing with
+`ALL 65 KEYS PASS`. Add `--joy` to require the ten joystick contacts as well.
+A quick per-unit test before a cartridge ships.
+
+The key names come from a copy of `Firmware/Controller/src/keymap.h` kept in
+`key2usbmon.swift`; if you retarget the keymap, update that table too (unknown
+usages still show as `HID 0xNN`).
+
+key2usbtest.prg (inside VICE)
+-----------------------------
+A small BASIC program that verifies a KEY2USB cartridge end to end. It runs
+**inside VICE on the host PC**, not on the Commodore — the C64/C128 is busy
+being a keyboard. It displays what VICE actually received: live joystick state
+for both ports, and the last key plus a short history.
+
+Use it to answer "is VICE configured correctly?" without guessing.
 
 Build
 -----
 Requires `petcat`, which ships with [VICE](https://vice-emu.sourceforge.io/).
 
-    make            # -> key2usbtest.prg
-    make run        # build, then launch it in x64sc
+    make key2usbtest.prg    # build
+    make run                # build, then launch it in x64sc
     make clean
 
 Or load the prebuilt `key2usbtest.prg` directly: drag it onto a running VICE

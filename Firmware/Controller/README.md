@@ -33,14 +33,20 @@ fresh chip is fully configured in one `pio run -t upload`.
 
 Fuses (one-time)
 ----------------
-For a 16 MHz crystal, no bootloader, ISP enabled, BOD off:
+For a 16 MHz crystal, no bootloader, ISP enabled, brown-out reset at 4.3 V:
 
 | Fuse  | Value | Meaning |
 |-------|-------|---------|
 | LFUSE | `0xFF`| low-power crystal 8–16 MHz, slow rising power, CKDIV8 off |
 | HFUSE | `0xDF`| SPIEN on, no bootloader (BOOTRST=1), reset enabled |
-| EFUSE | `0xFF`| brown-out detector disabled |
+| EFUSE | `0xFC`| brown-out detector at 4.3 V (v1.1 and earlier: `0xFF`, disabled) |
 | LOCK  | `0xFF`| unlocked |
+
+The brown-out level matters because 16 MHz is only in spec above ~3.8 V. With
+BOD off, a supply dip leaves the chip running out of spec, where it can do
+anything, including send garbage keystrokes. At 4.3 V it is held in reset
+until the supply recovers. The C64's +5 V rail is regulated, so this never
+trips in normal use.
 
 `fuses.cfg` holds these in minipro's config format (keys `lfuse`/`hfuse`/`efuse`/
 `lock`). **The critical one is LFUSE**: a factory-fresh 328 ships at `0x62`
@@ -57,9 +63,39 @@ fuses select the external crystal — setting LFUSE=0xFF is not a lock-out.
 
 USB identity
 ------------
-Uses obdev's free shared VID/PID for HID-class devices: `0x16c0/0x27db`
-(product string `KEY2USB`). Fine for personal use; see V-USB's
-`USB-IDs-for-free.txt` for the rules.
+Uses obdev's free shared VID/PID for USB keyboards, `0x16c0/0x27db`, with
+manufacturer string `acwright` and product string `KEY2USB`. That PID belongs
+to obdev's *serial-number* set, whose rules let a device omit the serial number
+when it relies only on the operating system's default class driver — true for
+a HID keyboard. See V-USB's `USB-IDs-for-free.txt`.
+
+`bcdDevice` carries the firmware version (`1.20` = v1.2.0).
+
+Reliability
+-----------
+Two mechanisms keep a key from staying held on the host:
+
+- **SYNC.** The cartridge sends event `0x7F` at reset and about once a second
+  while nothing is held; the controller then releases every key and modifier it
+  still holds. This covers releases that never reached the controller.
+- **Every report goes out twice.** V-USB marks an interrupt-IN report as sent
+  the moment it transmits it, without waiting for the host's ACK
+  (`lib/usbdrv/asmcommon.inc`). macOS sets a 24 ms HID idle rate, so it gets
+  the full state again within 24 ms regardless, but a host that sets idle rate
+  0 never asks again, and a lost "all released" report would leave a key held
+  until the next keystroke. Hosts ignore an identical repeat.
+
+There is no interrupt besides V-USB's: the 4 ms idle-rate tick polls the Timer0
+flag. V-USB requires any other ISR to be interruptible, and a plain timer ISR
+can delay the USB interrupt past what it tolerates.
+
+Licensing
+---------
+The KEY2USB sources in `src/` and `include/` are MIT-licensed, but the firmware
+links the vendored V-USB driver (`lib/usbdrv/`), which is licensed under the
+GNU GPL v2 or v3 (`lib/usbdrv/License.txt`). The built firmware image is
+therefore distributed under the GPL, with this repository as its
+corresponding source.
 
 The keymap
 ----------
@@ -85,8 +121,11 @@ Non-obvious defaults that match VICE positional:
     C64 £     -> HID End          C64 =         -> HID Page Down
     C64 up    -> HID '\'          C64 left      -> HID '`'
 
+    C64 RESTORE -> HID Page Up    (VICE positional's RESTORE key; keyID 126)
+
 Edit the table freely for other hosts/emulators. keyIDs 64–87 (C128 extended
 keys) are unmapped by default — see the Cart README to enable that scan.
+keyID 127 is SYNC and is handled before the table is consulted.
 
 Joysticks
 ---------
@@ -98,12 +137,10 @@ events, so the host just sees keystrokes. Defaults:
 | 2    | 112–116| Keypad 8 | Keypad 2 | Keypad 4 | Keypad 6 | Keypad 0 |
 | 1    | 120–124| Keypad − | Keypad + | Keypad / | Keypad &ast; | Keypad enter |
 
-Port 1 avoids the function-key row because **F12 proved undeliverable on a
-macOS + GTK3 VICE host** (verified 2026-07-19: F8–F11 all registered, F12 never
-did — including pressed directly on the host keyboard with the cartridge
-unplugged). The standard-function-keys setting, macOS symbolic hotkeys, VICE's
-hotkey files and the SDL menu key were all ruled out; the root cause was never
-found, so port 1 steers clear of that row entirely.
+Port 1 avoids the function-key row because **F12 never arrives in VICE as a
+key** (seen on hardware 2026-07-19: F8–F11 all registered, F12 never did, even
+from the host keyboard). The reason: VICE's positional keymap binds F12 to
+RESTORE (`gtk3_pos.vkm`: `F12 -3 0`), so VICE consumes it as the RESTORE line.
 
 Keypad **digits** are equally unusable: VICE's Numpad device — the port-2
 setting — claims KP 7/9/1/3 for diagonals and KP 0/5 for fire, so digits would

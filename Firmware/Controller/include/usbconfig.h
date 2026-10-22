@@ -39,7 +39,7 @@
  * PID 0x27db is the shared "HID keyboard" product ID for VID 0x16c0. */
 #define USB_CFG_VENDOR_ID       0xc0, 0x16      /* 0x16c0 */
 #define USB_CFG_DEVICE_ID       0xdb, 0x27      /* 0x27db - shared HID keyboard */
-#define USB_CFG_DEVICE_VERSION  0x01, 0x00      /* 0.01 */
+#define USB_CFG_DEVICE_VERSION  0x20, 0x01      /* bcdDevice 1.20 = firmware v1.2.0 */
 
 #define USB_CFG_VENDOR_NAME     'a','c','w','r','i','g','h','t'
 #define USB_CFG_VENDOR_NAME_LEN 8

@@ -24,6 +24,11 @@ Event byte (`$DE00` → latch → ATmega):
                        64..87   C128 extended keys (optional scan)
                        112..116 joystick port 2 (up/down/left/right/fire)
                        120..124 joystick port 1 (up/down/left/right/fire)
+                       126      RESTORE (a ~100 ms make/break tap per press)
+                       127      SYNC, always $7F: nothing is held, release all
+
+SYNC is sent at power-up/reset and about once a second while nothing is held,
+so a release the ATmega never received cannot leave a key stuck on the host.
 
 Both joystick ports are scanned alongside the matrix — they already sit on
 CIA#1, so this needs no extra hardware. Contacts are reported as ordinary key
@@ -48,3 +53,30 @@ Notes
   explanation in the top-level README's [VICE Setup](../README.md#vice-setup).
 - The keyID → USB HID table lives in `Controller/src/keymap.h` and is easy to
   retarget for other hosts/emulators.
+
+Version history
+---------------
+Both firmwares share a version number. The cartridge shows it on its splash
+screen; the controller reports it as the USB `bcdDevice` (`1.20` = v1.2.0,
+visible in `Software/key2usbmon`).
+
+**v1.2.0**
+- RESTORE no longer crashes the cartridge to BASIC (C64 bank: the NMI handler
+  popped three bytes that were never pushed; C128 bank: the CPU vectors read
+  open bus). RESTORE is now reported as keyID 126 → Page Up, VICE's RESTORE key.
+- SYNC event (keyID 127): any key still held on the host when the cartridge is
+  idle is released within about a second, and at every reset.
+- The controller sends every report twice. V-USB never re-sends an interrupt
+  report the host failed to receive, so a lost "all released" report used to
+  leave a key held on the host.
+- The controller's 1 ms timer interrupt is gone (polled instead); it broke
+  V-USB's interrupt-latency rule. HID idle rates of 256 ms or more are now timed
+  correctly, and GET/SET_PROTOCOL are implemented.
+- Cartridge delays run on a CIA timer, independent of CPU speed; row reads
+  repeat until stable; modifiers are sent before, and released after, the keys
+  they modify.
+- Brown-out detection enabled at 4.3 V (`efuse = 0xFC`).
+
+**v1.1.0** — both joystick ports; fixed same-column multi-key events.
+
+**v1.0** — initial release.

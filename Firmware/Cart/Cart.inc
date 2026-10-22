@@ -10,6 +10,21 @@ CIA1_PRA  = $DC00       ; port A - keyboard COLUMN select (walking zero)
 CIA1_PRB  = $DC01       ; port B - keyboard ROW read      (0 = pressed)
 CIA1_DDRA = $DC02       ; data direction A
 CIA1_DDRB = $DC03       ; data direction B
+CIA1_TBLO = $DC06       ; timer B latch, low byte
+CIA1_TBHI = $DC07       ; timer B latch, high byte
+CIA1_CRB  = $DC0F       ; timer B control (bit 0 = START)
+
+; ---- Timing (system clock cycles, ~1 us each) --------------------------------
+; Every delay runs on CIA#1 timer B, which counts the 1 MHz system clock no
+; matter how fast the CPU is (C128 FAST mode, accelerators, Ultimate turbo).
+PACE_CYCLES   = 5000    ; ~5 ms after each $DE00 write (ATmega needs << 1 ms)
+SCAN_CYCLES   = 10000   ; ~10 ms between full scans (debounce)
+SETTLE_CYCLES = 80      ; joystick lines rising through the CIA pull-ups
+SYNC_SCANS    = 96      ; idle scans between SYNC events (~1 s)
+RESTORE_SCANS = 10      ; scans RESTORE is reported held for (~100 ms)
+
+; ---- KERNAL vectors -----------------------------------------------------------
+NMINV     = $0318       ; RAM NMI vector the KERNAL NMI entry jumps through
 
 ; ---- Cartridge I/O -----------------------------------------------------------
 ; Writing any byte to IO1 ($DE00) pulses WRSTB, latching D0-D7 into the
@@ -32,8 +47,19 @@ CHROUT    = $FFD2
 ; ---- Event byte format (written to IO1) --------------------------------------
 ;   bit 7      : 1 = key pressed (make), 0 = key released (break)
 ;   bits 6..0  : keyID  (C64 matrix = col*8+row, 0..63; C128 extended = 64+;
-;                        joystick port 2 = 112..116)
+;                        joystick port 2 = 112..116, port 1 = 120..124;
+;                        RESTORE = 126)
 EV_PRESSED = $80        ; OR this into a keyID to mark a make event
+
+; RESTORE is not in the matrix: it pulls NMI, and only on the press edge. The
+; firmware reports each press as a short make/break tap on this keyID.
+KEY_RESTORE = 126
+
+; SYNC (keyID 127, break form): "nothing is held". Sent at power-up/reset and
+; about once a second while no key, stick or RESTORE is down. The ATmega clears
+; its whole key state on it, so a lost release can never leave a key stuck on
+; the host. An ATmega without SYNC support sees an unmapped key and ignores it.
+EV_SYNC   = $7F
 
 ; ---- Joysticks ---------------------------------------------------------------
 ; Both ports share CIA#1 with the keyboard: port 2 sits on port A (the COLUMN
@@ -63,3 +89,14 @@ JOY1_BASE = 120         ; port 1 -> 120..124
 ; Extended keyIDs are numbered 64 + kcol*8 + row.
 VIC_KBD   = $D02F
 EXT_BASE  = 64
+
+; ---- C128 MMU ----------------------------------------------------------------
+; The KERNAL starts a function ROM with $FF00 = $2A, which maps $C000-$FFFF to
+; external function ROM HIGH. This cartridge does not decode /ROMH, so the CPU
+; vectors at $FFFA-$FFFF read open bus ($FFFF in VICE) and an NMI jumps into
+; nothing. $0A keeps the cartridge at $8000-$BFFF but puts the KERNAL back at
+; $C000-$FFFF (I/O on, RAM at $4000-$7FFF, bank 0).
+MMU_CR      = $FF00
+MMU_CART_KERNAL = $0A
+C128_NMIEXIT = $FF33    ; KERNAL NMI exit: restore $FF00, Y, X, A, then RTI
+NMI_STUB    = $0B00     ; RAM home of the C128 NMI stub (cassette buffer)

@@ -23,7 +23,7 @@
 110 print "port 2 = keypad digits"
 120 print "port 1 = keypad symbols"
 130 print
-140 print "run/stop + restore to exit"
+140 print "run/stop to exit"
 150 dim c(4):for i=0 to 4:read c(i):next
 160 data 21,4,12,18,6
 170 p=1110:q=1150:hp=1272:hn=0
